@@ -35,8 +35,14 @@ local Remotes = {
 	GetSeason = getOrCreate("RemoteFunction", "GetSeason") :: RemoteFunction,
 	-- (player, facilityKey) -> spend coaching credits to upgrade a facility
 	UpgradeFacility = getOrCreate("RemoteFunction", "UpgradeFacility") :: RemoteFunction,
-	-- (player, teamId) -> stay or take a job offer; runs the offseason into next season
+	-- (player, teamId) -> stay or take a job offer; begins the interactive draft
 	ChooseJob = getOrCreate("RemoteFunction", "ChooseJob") :: RemoteFunction,
+	-- (player) -> current draft board view (prospects, who's on the clock, my picks)
+	GetDraft = getOrCreate("RemoteFunction", "GetDraft") :: RemoteFunction,
+	-- (player, prospectId) -> spend a scouting point to narrow that prospect's range
+	ScoutProspect = getOrCreate("RemoteFunction", "ScoutProspect") :: RemoteFunction,
+	-- (player, prospectId) -> draft that prospect; AI fills to your next pick / draft end
+	MakePick = getOrCreate("RemoteFunction", "MakePick") :: RemoteFunction,
 }
 
 return Remotes

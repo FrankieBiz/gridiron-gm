@@ -22,6 +22,7 @@ local Facilities = require(script.Parent.screens.Facilities)
 local CareerDecision = require(script.Parent.screens.CareerDecision)
 local CareerProfile = require(script.Parent.screens.CareerProfile)
 local History = require(script.Parent.screens.History)
+local DraftRoom = require(script.Parent.screens.DraftRoom)
 
 local e = React.createElement
 
@@ -60,6 +61,7 @@ local function App()
 	local lastGame, setLastGame = React.useState(nil :: any)
 	local pendingOffseason, setPendingOffseason = React.useState(nil :: any)
 	local career, setCareer = React.useState(nil :: any)
+	local draft, setDraft = React.useState(nil :: any)
 
 	React.useEffect(function()
 		task.spawn(function()
@@ -116,14 +118,38 @@ local function App()
 		refreshToApp()
 	end, { lastGame, refreshToApp })
 
-	-- Stay or take a job -> run offseason -> show recap.
+	-- Stay or take a job -> begin the interactive draft.
 	local chooseJob = React.useCallback(function(teamId: string)
 		task.spawn(function()
 			local res = Remotes.ChooseJob:InvokeServer(teamId)
-			if res and res.ok then
+			if res and res.ok and res.enteringDraft then
 				setCareer(nil)
-				setPendingOffseason(res.offseason)
-				setScreen("offseason")
+				setDraft(res.draft)
+				setScreen("draft")
+			end
+		end)
+	end, {})
+
+	local scoutProspect = React.useCallback(function(prospectId: string)
+		task.spawn(function()
+			local res = Remotes.ScoutProspect:InvokeServer(prospectId)
+			if res and res.ok then
+				setDraft(res.draft)
+			end
+		end)
+	end, {})
+
+	local makePick = React.useCallback(function(prospectId: string)
+		task.spawn(function()
+			local res = Remotes.MakePick:InvokeServer(prospectId)
+			if res and res.ok then
+				if res.done then
+					setDraft(nil)
+					setPendingOffseason(res.offseason)
+					setScreen("offseason")
+				else
+					setDraft(res.draft)
+				end
 			end
 		end)
 	end, {})
@@ -171,6 +197,16 @@ local function App()
 				if data and data.pendingCareer then
 					setCareer(data.pendingCareer)
 					setScreen("career")
+				elseif data and data.inDraft then
+					task.spawn(function()
+						local res = Remotes.GetDraft:InvokeServer()
+						if res and res.ok then
+							setDraft(res.draft)
+							setScreen("draft")
+						else
+							setScreen("app")
+						end
+					end)
 				else
 					setScreen("app")
 				end
@@ -178,6 +214,8 @@ local function App()
 		})
 	elseif screen == "select" then
 		body = e(TeamSelect, { onPick = pickTeam, onBack = backToMenu })
+	elseif screen == "draft" and draft then
+		body = e(DraftRoom, { draft = draft, onScout = scoutProspect, onPick = makePick })
 	elseif screen == "result" and lastGame then
 		body =
 			e(GameResult, { game = lastGame, teamId = data and data.teamId, onDone = resultDone })

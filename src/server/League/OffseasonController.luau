@@ -103,4 +103,91 @@ function OffseasonController.run(f: any, deps: Deps, baseSeed: number)
 	}
 end
 
+-- ---- Interactive-draft split (used by DraftService; `run` above stays for AI/tests) ----
+
+-- Age & develop every roster and build the draft class + order. Does NOT draft.
+-- Returns { class, order, retirees } (retirees are for f.teamId, i.e. the team you'll manage).
+function OffseasonController.preDraft(f: any, deps: Deps, baseSeed: number)
+	local season = f.season
+	local year = season.year
+	local teamIds = season.teamIds
+
+	local ranked = deps.Standings.compute(teamIds, season.results)
+	local order: { string } = {}
+	for i = #ranked, 1, -1 do
+		table.insert(order, ranked[i].teamId)
+	end
+
+	local facilities = f.facilities or { training = 1, rehab = 1, stadium = 1 }
+	local myRetirees: { any } = {}
+	for _, teamId in teamIds do
+		local team = f.league[teamId]
+		local opts = if teamId == f.teamId
+			then { trainingLevel = facilities.training, rehabLevel = facilities.rehab }
+			else nil
+		local res =
+			deps.Development.ageAndDevelop(team.roster, baseSeed + year * 13 + #team.roster, opts)
+		team.roster = res.roster
+		if teamId == f.teamId then
+			myRetirees = res.retirees
+		end
+	end
+
+	local class = deps.DraftClass.generate(year, #teamIds * 3 + 12, baseSeed + year * 77)
+	return { class = class, order = order, retirees = myRetirees }
+end
+
+-- After the (interactive) draft: trim rosters, award credits, record history, roll next
+-- season. `ctx` describes the season you just coached (captured before any team switch):
+-- { year, champion, recWins, recLosses, wonIt, retirees }. `draftPicks` = DraftBoard.picks.
+function OffseasonController.finalize(f: any, deps: Deps, ctx: any, draftPicks: { any })
+	local teamIds = f.season.teamIds
+
+	for _, teamId in teamIds do
+		local team = f.league[teamId]
+		if #team.roster > MAX_ROSTER then
+			table.sort(team.roster, function(a, b)
+				return a.overall > b.overall
+			end)
+			while #team.roster > MAX_ROSTER do
+				table.remove(team.roster)
+			end
+		end
+	end
+
+	local facilities = f.facilities or { training = 1, rehab = 1, stadium = 1 }
+	local stadiumBonus = (facilities.stadium - 1) * 2
+	local creditsEarned = 10 + ctx.recWins + (if ctx.wonIt then 25 else 0) + stadiumBonus
+	f.coachingCredits = (f.coachingCredits or 0) + creditsEarned
+
+	f.history = f.history or { seasons = {} }
+	table.insert(f.history.seasons, {
+		year = ctx.year,
+		wins = ctx.recWins,
+		losses = ctx.recLosses,
+		champion = ctx.champion,
+		wonIt = ctx.wonIt,
+	})
+
+	local myRookies: { any } = {}
+	for _, d in draftPicks do
+		if d.teamId == f.teamId then
+			table.insert(myRookies, d)
+		end
+	end
+
+	f.season = deps.SeasonController.new(teamIds, deps.Schedule.generate(teamIds))
+	f.season.year = ctx.year + 1
+
+	return {
+		year = ctx.year,
+		nextYear = ctx.year + 1,
+		champion = ctx.champion,
+		retirees = ctx.retirees,
+		rookies = myRookies,
+		creditsEarned = creditsEarned,
+		totalCredits = f.coachingCredits,
+	}
+end
+
 return OffseasonController

@@ -73,6 +73,7 @@ local function buildState(f: any)
 		achievements = f.achievements or {},
 		achievementDefs = ACHIEVEMENT_DEFS,
 		dynastyScore = f.dynastyScore or 0,
+		inDraft = f.draft ~= nil,
 		season = {
 			year = f.season.year,
 			week = f.season.week,

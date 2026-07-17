@@ -14,12 +14,11 @@ local SeasonController = require(script.Parent.Parent.League.SeasonController)
 local Development = require(script.Parent.Parent.League.Development)
 local DraftClass = require(script.Parent.Parent.League.DraftClass)
 local Draft = require(script.Parent.Parent.League.Draft)
+local DraftBoard = require(script.Parent.Parent.League.DraftBoard)
 local OffseasonController = require(script.Parent.Parent.League.OffseasonController)
 local CareerController = require(script.Parent.Parent.League.CareerController)
-local News = require(script.Parent.Parent.League.News)
 local Awards = require(script.Parent.Parent.League.Awards)
 local Stats = require(script.Parent.Parent.League.Stats)
-local Achievements = require(script.Parent.Parent.League.Achievements)
 
 local SeasonService = {}
 
@@ -158,66 +157,30 @@ function SeasonService:Start()
 			return { ok = false, error = "not an available job" }
 		end
 
-		local report = f.pendingCareer.report
-		local awards = f.pendingCareer.awards
-		local oldTeamName = f.league[f.teamId].name
-		local prestigeBefore = f.league[f.teamId].prestige or 3
+		-- Capture the season you just coached (before any team switch) for finalize/news.
+		local oldTeamId = f.teamId
+		local oldRec = Standings.recordFor(f.season.teamIds, f.season.results, oldTeamId)
+		local champion = f.season.playoffs and f.season.playoffs.champion
+		f.offseasonCtx = {
+			year = f.season.year,
+			oldTeamName = f.league[oldTeamId].name,
+			recWins = oldRec.wins,
+			recLosses = oldRec.losses,
+			champion = champion,
+			wonIt = champion == oldTeamId,
+			prestigeBefore = f.league[oldTeamId].prestige or 3,
+			madePlayoffs = f.pendingCareer.report.madePlayoffs,
+			report = f.pendingCareer.report,
+			awards = f.pendingCareer.awards,
+		}
 
-		-- Wrap up the finished season (credits/history for the team you just coached),
-		-- age the whole league, run the draft, and build next season.
-		local summary = OffseasonController.run(f, OFFSEASON_DEPS, f.seed)
-
-		-- Achievements + dynasty score, checked against the just-finished season.
-		f.achievements = f.achievements or {}
-		local seasons = (f.history and f.history.seasons) or {}
-		local lastSeason = seasons[#seasons] or { wins = 0, losses = 0, wonIt = false }
-		local achResult = Achievements.check(f.achievements, {
-			coach = f.coach,
-			history = seasons,
-			lastSeason = lastSeason,
-			madePlayoffs = report.madePlayoffs,
-			prestige = prestigeBefore,
-		})
-		f.dynastyScore = achResult.dynastyScore
-
-		-- Generate news headlines from what just happened (kept newest-first, capped).
-		f.news = f.news or {}
-		local fresh = News.fromOffseason(summary, report, oldTeamName)
-		-- Award headlines (MVP + your own players making All-League).
-		if awards then
-			for _, a in awards.majors do
-				table.insert(fresh, {
-					kind = "award",
-					text = string.format(
-						"🏅 %s: %s %s (%s) — %s",
-						a.title,
-						a.position,
-						a.name,
-						a.teamName,
-						a.stat
-					),
-				})
-			end
-		end
-		-- Newly-unlocked achievements.
-		for _, def in achResult.newlyUnlocked do
-			table.insert(fresh, {
-				kind = "title",
-				text = string.format("⭐ ACHIEVEMENT: %s — %s", def.name, def.desc),
-			})
-		end
-		for i = #fresh, 1, -1 do
-			table.insert(f.news, 1, fresh[i])
-		end
-		while #f.news > 60 do
-			table.remove(f.news)
-		end
-
-		local switched = teamId ~= f.teamId
+		-- Take the job (you'll draft for your NEW team).
+		local switched = teamId ~= oldTeamId
 		if switched then
 			f.teamId = teamId
 			f.coach.teamsCoached = f.coach.teamsCoached or {}
 			table.insert(f.coach.teamsCoached, teamId)
+			f.news = f.news or {}
 			table.insert(f.news, 1, {
 				kind = "career",
 				text = string.format(
@@ -228,7 +191,33 @@ function SeasonService:Start()
 		end
 		f.pendingCareer = false
 
-		return { ok = true, offseason = summary, switched = switched }
+		-- Age everyone, generate the class, and open the interactive draft.
+		local prep = OffseasonController.preDraft(f, OFFSEASON_DEPS, f.seed)
+		f.offseasonCtx.retirees = prep.retirees
+
+		local rounds = Draft.ROUNDS
+		local fullOrder = {}
+		for _ = 1, rounds do
+			for _, id in prep.order do
+				table.insert(fullOrder, id)
+			end
+		end
+		f.draft = DraftBoard.new(
+			fullOrder,
+			prep.class,
+			f.teamId,
+			10,
+			f.seed + f.offseasonCtx.year,
+			rounds
+		)
+		DraftBoard.runToHumanOrEnd(f.draft, f.league, Draft)
+
+		return {
+			ok = true,
+			enteringDraft = true,
+			switched = switched,
+			draft = DraftBoard.view(f.draft, DraftClass),
+		}
 	end
 end
 

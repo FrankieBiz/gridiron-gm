@@ -16,6 +16,7 @@ local loader = ServiceLoader.new()
 loader:add(require(script.Services.SaveService)) -- must init first (others read saves)
 loader:add(require(script.Services.FranchiseService))
 loader:add(require(script.Services.SeasonService))
+loader:add(require(script.Services.DraftService))
 loader:start()
 
 print("[GRIDIRON] Server up.")

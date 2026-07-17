@@ -1,13 +1,13 @@
 --!strict
--- Runs the rookie draft: worst teams pick first, each team drafts for need + best value,
--- prospects convert into real players on the roster. Pure Luau -> Lune-testable.
--- (Manual player-controlled drafting comes with the draft-board UI; for now every team,
---  including the player's, auto-drafts sensibly so the multi-season loop is complete.)
+-- Draft helpers + an AI-only auto-draft. `bestIndex`/`toPlayer` are reused by the
+-- interactive DraftBoard so human and AI picks share one code path. Pure Luau (seed-based).
 
 local Draft = {}
 
 local ROUNDS = 3
 local TARGET = { QB = 2, RB = 3, WR = 4, TE = 1, OL = 5, DL = 3, LB = 2, DB = 3 }
+
+Draft.ROUNDS = ROUNDS
 
 local function makeRng(seed: number)
 	local state = seed % 2147483647
@@ -34,7 +34,9 @@ local function positionCounts(roster: { any }): { [string]: number }
 	return counts
 end
 
-local function prospectToPlayer(pick: any, teamId: string, rng: any): any
+-- Convert a drafted prospect into a real roster player (deterministic from seed).
+function Draft.toPlayer(pick: any, teamId: string, seed: number): any
+	local rng = makeRng(seed)
 	return {
 		id = teamId .. "-" .. pick.id,
 		name = pick.name,
@@ -52,36 +54,40 @@ local function prospectToPlayer(pick: any, teamId: string, rng: any): any
 	}
 end
 
--- order: teamIds worst -> best. Mutates league rosters. Returns a pick log.
-function Draft.run(league: any, order: { string }, class: { any }, seed: number): { any }
+-- Index (into `remaining`) of the best prospect for this team by talent + positional need.
+function Draft.bestIndex(team: any, remaining: { any }, seed: number): number
 	local rng = makeRng(seed)
+	local counts = positionCounts(team.roster)
+	local bestIdx, bestScore = 1, -math.huge
+	for idx, pr in remaining do
+		local need = math.max(0, (TARGET[pr.position] or 2) - (counts[pr.position] or 0))
+		local score = pr.trueOverall
+			+ need * 9
+			+ (pr.truePotential - pr.trueOverall) * 0.5
+			+ rng.int(0, 3)
+		if score > bestScore then
+			bestScore = score
+			bestIdx = idx
+		end
+	end
+	return bestIdx
+end
+
+-- AI-only auto-draft (used for fully-simulated leagues / tests). order: worst-first.
+function Draft.run(league: any, order: { string }, class: { any }, seed: number): { any }
 	local remaining = table.clone(class)
 	local results: { any } = {}
-
+	local n = 0
 	for round = 1, ROUNDS do
 		for _, teamId in order do
 			if #remaining == 0 then
 				break
 			end
+			n += 1
 			local team = league[teamId]
-			local counts = positionCounts(team.roster)
-
-			-- Score each remaining prospect by talent + how badly this team needs the position.
-			local bestIdx, bestScore = 1, -math.huge
-			for idx, pr in remaining do
-				local need = math.max(0, (TARGET[pr.position] or 2) - (counts[pr.position] or 0))
-				local score = pr.trueOverall
-					+ need * 9
-					+ (pr.truePotential - pr.trueOverall) * 0.5
-					+ rng.int(0, 3)
-				if score > bestScore then
-					bestScore = score
-					bestIdx = idx
-				end
-			end
-
-			local pick = table.remove(remaining, bestIdx)
-			local player = prospectToPlayer(pick, teamId, rng)
+			local idx = Draft.bestIndex(team, remaining, seed + n)
+			local pick = table.remove(remaining, idx)
+			local player = Draft.toPlayer(pick, teamId, seed + n * 7)
 			table.insert(team.roster, player)
 			table.insert(results, {
 				teamId = teamId,
@@ -94,7 +100,6 @@ function Draft.run(league: any, order: { string }, class: { any }, seed: number)
 			})
 		end
 	end
-
 	return results
 end
 
