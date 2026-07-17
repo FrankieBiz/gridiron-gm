@@ -24,6 +24,8 @@ local CareerProfile = require(script.Parent.screens.CareerProfile)
 local History = require(script.Parent.screens.History)
 local DraftRoom = require(script.Parent.screens.DraftRoom)
 local FreeAgency = require(script.Parent.screens.FreeAgency)
+local Fade = require(script.Parent.components.Fade)
+local Sound = require(script.Parent.Sound)
 
 local e = React.createElement
 
@@ -90,6 +92,7 @@ local function App()
 	end, {})
 
 	local simWeek = React.useCallback(function()
+		Sound.play("whistle")
 		task.spawn(function()
 			local res = Remotes.SimGame:InvokeServer()
 			if res and res.ok then
@@ -142,6 +145,7 @@ local function App()
 	end, {})
 
 	local makePick = React.useCallback(function(prospectId: string)
+		Sound.play("pick")
 		task.spawn(function()
 			local res = Remotes.MakePick:InvokeServer(prospectId)
 			if res and res.ok then
@@ -174,6 +178,7 @@ local function App()
 	end, {})
 
 	local signFreeAgent = React.useCallback(function(faId: string)
+		Sound.play("cash")
 		task.spawn(function()
 			local res = Remotes.SignFreeAgent:InvokeServer(faId)
 			if res and res.ok then
@@ -204,6 +209,7 @@ local function App()
 	end, {})
 
 	local upgradeFacility = React.useCallback(function(key: string)
+		Sound.play("cash")
 		task.spawn(function()
 			local res = Remotes.UpgradeFacility:InvokeServer(key)
 			if res and res.ok then
@@ -337,7 +343,7 @@ local function App()
 				BackgroundTransparency = 1,
 				Position = UDim2.fromOffset(0, 82),
 				Size = UDim2.new(1, 0, 1, -146),
-			}, { screen = content }),
+			}, { fade = e(Fade, { trigger = tab }, { screen = content }) }),
 			tabs = e(TabBar, { active = tab, onSelect = setTab }),
 		})
 	end
@@ -351,7 +357,7 @@ local function App()
 			Rotation = 90,
 			Color = ColorSequence.new(Theme.bgTop, Theme.bgBottom),
 		}),
-		body = body,
+		body = e(Fade, { trigger = screen }, { body = body }),
 	})
 end
 
