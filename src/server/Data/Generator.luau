@@ -15,6 +15,7 @@ type Player = {
 	contractYears: number,
 	salary: number,
 	morale: number,
+	devTrait: string, -- "normal" | "star" | "superstar" — drives development speed
 }
 
 type TeamIdentity = {
@@ -126,6 +127,16 @@ local function makePlayer(
 	local upside = if age <= 24 then rng.int(3, 14) else rng.int(0, 4)
 	local potential = math.clamp(overall + upside, overall, 99)
 
+	-- Dev trait: high upside players occasionally roll star/superstar (faster growth).
+	local gap = potential - overall
+	local devRoll = rng.float()
+	local devTrait = "normal"
+	if gap >= 16 and devRoll < 0.10 then
+		devTrait = "superstar"
+	elseif gap >= 10 and devRoll < 0.28 then
+		devTrait = "star"
+	end
+
 	return {
 		id = teamId .. "-" .. index,
 		name = rng.pick(FIRST_NAMES) .. " " .. rng.pick(LAST_NAMES),
@@ -139,6 +150,7 @@ local function makePlayer(
 		contractYears = rng.int(1, 4),
 		salary = math.floor(overall * overall * 0.9), -- rough "coaching credits" cost
 		morale = rng.int(62, 92),
+		devTrait = devTrait,
 	}
 end
 
