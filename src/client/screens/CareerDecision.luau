@@ -12,6 +12,7 @@ local e = React.createElement
 type Props = {
 	report: any,
 	offers: { any },
+	awards: any,
 	team: any,
 	prestige: number,
 	onChoose: (teamId: string) -> (),
@@ -80,6 +81,41 @@ local function CareerDecision(props: Props)
 	}
 
 	local order = 2
+
+	-- League awards card (MVP / POYs / ROY).
+	if props.awards and props.awards.majors and #props.awards.majors > 0 then
+		local awardChildren: { [string]: any } = {
+			title = e("TextLabel", {
+				Text = "🏅 LEAGUE AWARDS",
+				Font = Theme.font.display,
+				TextScaled = true,
+				TextColor3 = Theme.gold,
+				BackgroundTransparency = 1,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				Position = UDim2.fromOffset(16, 12),
+				Size = UDim2.new(1, -32, 0, 22),
+			}, { max = e("UITextSizeConstraint", { MaxTextSize = 20 }) }),
+		}
+		for i, a in props.awards.majors do
+			awardChildren["a_" .. i] = e("TextLabel", {
+				Text = string.format("%s — %s %s (%s)", a.title, a.position, a.name, a.teamName),
+				Font = Theme.font.medium,
+				TextColor3 = Theme.chalk,
+				TextSize = 14,
+				TextTruncate = Enum.TextTruncate.AtEnd,
+				BackgroundTransparency = 1,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				Position = UDim2.fromOffset(16, 34 + (i - 1) * 22),
+				Size = UDim2.new(1, -32, 0, 20),
+			})
+		end
+		items.awards = e(Card, {
+			size = UDim2.new(1, 0, 0, 44 + #props.awards.majors * 22),
+			layoutOrder = order,
+			children = awardChildren,
+		})
+		order += 1
+	end
 
 	if not fired then
 		items.stay = e(Card, {

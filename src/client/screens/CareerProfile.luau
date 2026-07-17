@@ -15,6 +15,9 @@ type Props = {
 	prestige: number,
 	expectedWins: number,
 	record: { wins: number, losses: number },
+	achievements: { [string]: boolean }?,
+	achievementDefs: { any }?,
+	dynastyScore: number?,
 }
 
 local function stars(n: number): string
@@ -59,6 +62,70 @@ local function CareerProfile(props: Props)
 	local secColor = if sec >= 55 then Theme.green elseif sec >= 25 then Theme.gold else Theme.flag
 	local seatLabel = if sec >= 55 then "SECURE" elseif sec >= 25 then "ON NOTICE" else "HOT SEAT"
 
+	-- Achievements grid: one row per achievement, unlocked ones lit gold.
+	local owned = props.achievements or {}
+	local defs = props.achievementDefs or {}
+	local unlockedCount = 0
+	for _, d in defs do
+		if owned[d.id] then
+			unlockedCount += 1
+		end
+	end
+	local achRows: { [string]: any } = {
+		layout = e(
+			"UIListLayout",
+			{ Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }
+		),
+	}
+	for i, d in defs do
+		local got = owned[d.id] == true
+		achRows["a_" .. d.id] = e("Frame", {
+			BackgroundColor3 = if got then Theme.field2 else Theme.field3,
+			Size = UDim2.new(1, 0, 0, 44),
+			LayoutOrder = if got then i else 100 + i,
+			BorderSizePixel = 0,
+		}, {
+			corner = e("UICorner", { CornerRadius = UDim.new(0, 8) }),
+			icon = e("TextLabel", {
+				Text = if got then "🏅" else "🔒",
+				TextScaled = true,
+				BackgroundTransparency = 1,
+				Position = UDim2.fromOffset(10, 10),
+				Size = UDim2.fromOffset(24, 24),
+			}),
+			name = e("TextLabel", {
+				Text = d.name,
+				Font = Theme.font.bold,
+				TextScaled = true,
+				TextColor3 = if got then Theme.gold else Theme.chalkSoft,
+				BackgroundTransparency = 1,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				Position = UDim2.fromOffset(44, 7),
+				Size = UDim2.new(1, -110, 0, 16),
+			}, { max = e("UITextSizeConstraint", { MaxTextSize = 15 }) }),
+			desc = e("TextLabel", {
+				Text = d.desc,
+				Font = Theme.font.body,
+				TextScaled = true,
+				TextColor3 = Theme.chalkSoft,
+				BackgroundTransparency = 1,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				Position = UDim2.fromOffset(44, 24),
+				Size = UDim2.new(1, -110, 0, 13),
+			}, { max = e("UITextSizeConstraint", { MaxTextSize = 12 }) }),
+			pts = e("TextLabel", {
+				Text = "+" .. d.points,
+				Font = Theme.font.display,
+				TextScaled = true,
+				TextColor3 = if got then Theme.gold else Theme.line,
+				BackgroundTransparency = 1,
+				TextXAlignment = Enum.TextXAlignment.Right,
+				Position = UDim2.new(1, -54, 0, 12),
+				Size = UDim2.fromOffset(44, 20),
+			}, { max = e("UITextSizeConstraint", { MaxTextSize = 16 }) }),
+		})
+	end
+
 	return e("ScrollingFrame", {
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
@@ -77,9 +144,46 @@ local function CareerProfile(props: Props)
 			{ Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder }
 		),
 
+		dynasty = e(Card, {
+			size = UDim2.new(1, 0, 0, 72),
+			layoutOrder = 1,
+			children = {
+				label = e("TextLabel", {
+					Text = "DYNASTY SCORE",
+					Font = Theme.font.bold,
+					TextScaled = true,
+					TextColor3 = Theme.chalkSoft,
+					BackgroundTransparency = 1,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					Position = UDim2.fromOffset(16, 12),
+					Size = UDim2.fromOffset(180, 14),
+				}, { max = e("UITextSizeConstraint", { MaxTextSize = 13 }) }),
+				value = e("TextLabel", {
+					Text = tostring(props.dynastyScore or 0),
+					Font = Theme.font.display,
+					TextScaled = true,
+					TextColor3 = Theme.gold,
+					BackgroundTransparency = 1,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					Position = UDim2.fromOffset(16, 28),
+					Size = UDim2.fromOffset(160, 34),
+				}, { max = e("UITextSizeConstraint", { MaxTextSize = 32 }) }),
+				ach = e("TextLabel", {
+					Text = string.format("🏅 %d / %d", unlockedCount, #defs),
+					Font = Theme.font.bold,
+					TextScaled = true,
+					TextColor3 = Theme.chalk,
+					BackgroundTransparency = 1,
+					TextXAlignment = Enum.TextXAlignment.Right,
+					Position = UDim2.new(1, -110, 0, 26),
+					Size = UDim2.fromOffset(96, 24),
+				}, { max = e("UITextSizeConstraint", { MaxTextSize = 20 }) }),
+			},
+		}),
+
 		status = e(Card, {
 			size = UDim2.new(1, 0, 0, 128),
-			layoutOrder = 1,
+			layoutOrder = 2,
 			children = {
 				rep = bar(rep, Theme.gold, 12, "REPUTATION  " .. math.floor(rep)),
 				sec = bar(sec, secColor, 62, "JOB SECURITY  ·  " .. seatLabel),
@@ -88,7 +192,7 @@ local function CareerProfile(props: Props)
 
 		record = e(Card, {
 			size = UDim2.new(1, 0, 0, 118),
-			layoutOrder = 2,
+			layoutOrder = 3,
 			children = {
 				title = e("TextLabel", {
 					Text = "CAREER",
@@ -124,7 +228,7 @@ local function CareerProfile(props: Props)
 
 		job = e(Card, {
 			size = UDim2.new(1, 0, 0, 96),
-			layoutOrder = 3,
+			layoutOrder = 4,
 			children = {
 				title = e("TextLabel", {
 					Text = "CURRENT JOB",
@@ -158,6 +262,23 @@ local function CareerProfile(props: Props)
 				}),
 			},
 		}),
+
+		achTitle = e("TextLabel", {
+			Text = "🏅 ACHIEVEMENTS",
+			Font = Theme.font.bold,
+			TextScaled = true,
+			TextColor3 = Theme.chalkSoft,
+			BackgroundTransparency = 1,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Size = UDim2.new(1, 0, 0, 18),
+			LayoutOrder = 5,
+		}, { max = e("UITextSizeConstraint", { MaxTextSize = 15 }) }),
+		achievements = e("Frame", {
+			BackgroundTransparency = 1,
+			Size = UDim2.fromScale(1, 0),
+			AutomaticSize = Enum.AutomaticSize.Y,
+			LayoutOrder = 6,
+		}, achRows),
 	})
 end
 

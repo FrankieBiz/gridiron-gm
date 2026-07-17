@@ -14,6 +14,16 @@ local Schedule = require(script.Parent.Parent.League.Schedule)
 local Standings = require(script.Parent.Parent.League.Standings)
 local SeasonController = require(script.Parent.Parent.League.SeasonController)
 local CareerController = require(script.Parent.Parent.League.CareerController)
+local Achievements = require(script.Parent.Parent.League.Achievements)
+
+-- Client-safe achievement metadata (no test predicates), computed once.
+local ACHIEVEMENT_DEFS = {}
+for _, def in Achievements.defs do
+	table.insert(
+		ACHIEVEMENT_DEFS,
+		{ id = def.id, name = def.name, desc = def.desc, points = def.points }
+	)
+end
 
 local FranchiseService = {}
 
@@ -61,6 +71,7 @@ local function buildState(f: any)
 		news = f.news or {},
 		history = (f.history and f.history.seasons) or {},
 		achievements = f.achievements or {},
+		achievementDefs = ACHIEVEMENT_DEFS,
 		dynastyScore = f.dynastyScore or 0,
 		season = {
 			year = f.season.year,

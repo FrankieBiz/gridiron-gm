@@ -45,6 +45,9 @@ local function fetchAll(): any?
 		pendingCareer = st.pendingCareer or false,
 		news = st.news or {},
 		history = st.history or {},
+		achievements = st.achievements or {},
+		achievementDefs = st.achievementDefs or {},
+		dynastyScore = st.dynastyScore or 0,
 		standings = (se and se.ok and se.standings) or {},
 		schedule = (se and se.ok and se.schedule) or {},
 	}
@@ -182,6 +185,7 @@ local function App()
 		body = e(CareerDecision, {
 			report = career.report,
 			offers = career.offers,
+			awards = career.awards,
 			team = data.team,
 			prestige = data.prestige,
 			onChoose = chooseJob,
@@ -221,6 +225,9 @@ local function App()
 				prestige = data.prestige,
 				expectedWins = data.expectedWins,
 				record = data.record,
+				achievements = data.achievements,
+				achievementDefs = data.achievementDefs,
+				dynastyScore = data.dynastyScore,
 			})
 		else
 			content = e(History, {
