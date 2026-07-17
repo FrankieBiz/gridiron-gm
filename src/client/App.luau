@@ -19,6 +19,8 @@ local LeagueTable = require(script.Parent.screens.LeagueTable)
 local GameResult = require(script.Parent.screens.GameResult)
 local Offseason = require(script.Parent.screens.Offseason)
 local Facilities = require(script.Parent.screens.Facilities)
+local CareerDecision = require(script.Parent.screens.CareerDecision)
+local CareerProfile = require(script.Parent.screens.CareerProfile)
 
 local e = React.createElement
 
@@ -36,6 +38,10 @@ local function fetchAll(): any?
 		record = st.record,
 		season = st.season,
 		facilities = st.facilities or { training = 1, rehab = 1, stadium = 1 },
+		coach = st.coach,
+		prestige = st.prestige or 3,
+		expectedWins = st.expectedWins or 8,
+		pendingCareer = st.pendingCareer or false,
 		standings = (se and se.ok and se.standings) or {},
 		schedule = (se and se.ok and se.schedule) or {},
 	}
@@ -47,6 +53,7 @@ local function App()
 	local data, setData = React.useState(nil :: any)
 	local lastGame, setLastGame = React.useState(nil :: any)
 	local pendingOffseason, setPendingOffseason = React.useState(nil :: any)
+	local career, setCareer = React.useState(nil :: any)
 
 	React.useEffect(function()
 		task.spawn(function()
@@ -77,21 +84,12 @@ local function App()
 			local res = Remotes.SimGame:InvokeServer()
 			if res and res.ok then
 				setLastGame(res)
-				if res.offseason then
-					setPendingOffseason(res.offseason)
-					setScreen("offseason") -- recap first, then play the opening game
-				else
-					setScreen("result")
-				end
+				setScreen("result")
 			end
 		end)
 	end, {})
 
-	local offseasonDone = React.useCallback(function()
-		setScreen("result")
-	end, {})
-
-	local resultDone = React.useCallback(function()
+	local refreshToApp = React.useCallback(function()
 		task.spawn(function()
 			local d = fetchAll()
 			if d then
@@ -101,6 +99,32 @@ local function App()
 			setScreen("app")
 		end)
 	end, {})
+
+	-- After the game result: if the season just ended, go to the career decision.
+	local resultDone = React.useCallback(function()
+		if lastGame and lastGame.careerReport then
+			setCareer(lastGame.careerReport)
+			setScreen("career")
+			return
+		end
+		refreshToApp()
+	end, { lastGame, refreshToApp })
+
+	-- Stay or take a job -> run offseason -> show recap.
+	local chooseJob = React.useCallback(function(teamId: string)
+		task.spawn(function()
+			local res = Remotes.ChooseJob:InvokeServer(teamId)
+			if res and res.ok then
+				setCareer(nil)
+				setPendingOffseason(res.offseason)
+				setScreen("offseason")
+			end
+		end)
+	end, {})
+
+	local offseasonDone = React.useCallback(function()
+		refreshToApp()
+	end, { refreshToApp })
 
 	local backToMenu = React.useCallback(function()
 		setScreen("menu")
@@ -138,7 +162,12 @@ local function App()
 				setScreen("select")
 			end,
 			onContinue = function()
-				setScreen("app")
+				if data and data.pendingCareer then
+					setCareer(data.pendingCareer)
+					setScreen("career")
+				else
+					setScreen("app")
+				end
 			end,
 		})
 	elseif screen == "select" then
@@ -146,6 +175,14 @@ local function App()
 	elseif screen == "result" and lastGame then
 		body =
 			e(GameResult, { game = lastGame, teamId = data and data.teamId, onDone = resultDone })
+	elseif screen == "career" and career and data then
+		body = e(CareerDecision, {
+			report = career.report,
+			offers = career.offers,
+			team = data.team,
+			prestige = data.prestige,
+			onChoose = chooseJob,
+		})
 	elseif screen == "offseason" and pendingOffseason and data then
 		body =
 			e(Offseason, { summary = pendingOffseason, teams = data.teams, onDone = offseasonDone })
@@ -167,11 +204,19 @@ local function App()
 				LeagueTable,
 				{ teamId = data.teamId, teams = data.teams, standings = data.standings }
 			)
-		else
+		elseif tab == "HQ" then
 			content = e(Facilities, {
 				facilities = data.facilities,
 				credits = data.credits,
 				onUpgrade = upgradeFacility,
+			})
+		else
+			content = e(CareerProfile, {
+				coach = data.coach,
+				team = data.team,
+				prestige = data.prestige,
+				expectedWins = data.expectedWins,
+				record = data.record,
 			})
 		end
 

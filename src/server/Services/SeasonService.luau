@@ -15,6 +15,7 @@ local Development = require(script.Parent.Parent.League.Development)
 local DraftClass = require(script.Parent.Parent.League.DraftClass)
 local Draft = require(script.Parent.Parent.League.Draft)
 local OffseasonController = require(script.Parent.Parent.League.OffseasonController)
+local CareerController = require(script.Parent.Parent.League.CareerController)
 
 local SeasonService = {}
 
@@ -41,11 +42,13 @@ function SeasonService:Start()
 		end
 		local f = profile.Data.franchise
 
-		-- If last season is over, run the offseason (age/develop/retire + draft) and roll
-		-- into the new year, then play its opening week in the same click.
-		local offseasonSummary = nil
+		-- Season's over — the player must handle their career (stay / take a job) first.
 		if f.season.phase == "offseason" then
-			offseasonSummary = OffseasonController.run(f, OFFSEASON_DEPS, f.seed)
+			return {
+				ok = false,
+				error = "Season over — choose your next move.",
+				careerReport = f.pendingCareer,
+			}
 		end
 
 		local season = f.season
@@ -61,6 +64,38 @@ function SeasonService:Start()
 			end
 		end
 
+		-- If that game just ended the season, grade the coach and generate job offers.
+		local careerReport = nil
+		if out.phase == "offseason" then
+			local ranked = Standings.compute(season.teamIds, season.results)
+			local rank = 99
+			for i, row in ranked do
+				if row.teamId == f.teamId then
+					rank = i
+					break
+				end
+			end
+			local rec = Standings.recordFor(season.teamIds, season.results, f.teamId)
+			local prestige = f.league[f.teamId].prestige or 3
+			f.coach = f.coach or CareerController.newCoach(f.teamId)
+			local report = CareerController.evaluate(
+				f.coach,
+				rec,
+				out.champion == f.teamId,
+				rank <= 4,
+				prestige
+			)
+			local offers = CareerController.generateOffers(
+				f.coach,
+				f.league,
+				f.teamId,
+				report.fired,
+				f.seed + season.year
+			)
+			f.pendingCareer = { report = report, offers = offers }
+			careerReport = f.pendingCareer
+		end
+
 		return {
 			ok = true,
 			result = mine,
@@ -72,7 +107,7 @@ function SeasonService:Start()
 			champion = out.champion,
 			year = season.year,
 			week = season.week,
-			offseason = offseasonSummary, -- present only on the first game of a new season
+			careerReport = careerReport, -- present only on the game that ends a season
 		}
 	end
 
@@ -92,6 +127,44 @@ function SeasonService:Start()
 			standings = Standings.compute(season.teamIds, season.results),
 			schedule = season.schedule,
 		}
+	end
+
+	-- Stay or accept a job offer, then run the offseason into next season.
+	Remotes.ChooseJob.OnServerInvoke = function(player: Player, teamId: any)
+		local profile = SaveService.get(player)
+		if not profile or not profile.Data.franchise then
+			return { ok = false, error = "no franchise" }
+		end
+		local f = profile.Data.franchise
+		if f.season.phase ~= "offseason" or not f.pendingCareer then
+			return { ok = false, error = "no career decision pending" }
+		end
+
+		-- Only the current team (stay) or one of the offered jobs is valid.
+		local valid = teamId == f.teamId
+		for _, offer in f.pendingCareer.offers do
+			if offer.teamId == teamId then
+				valid = true
+				break
+			end
+		end
+		if not valid then
+			return { ok = false, error = "not an available job" }
+		end
+
+		-- Wrap up the finished season (credits/history for the team you just coached),
+		-- age the whole league, run the draft, and build next season.
+		local summary = OffseasonController.run(f, OFFSEASON_DEPS, f.seed)
+
+		local switched = teamId ~= f.teamId
+		if switched then
+			f.teamId = teamId
+			f.coach.teamsCoached = f.coach.teamsCoached or {}
+			table.insert(f.coach.teamsCoached, teamId)
+		end
+		f.pendingCareer = false
+
+		return { ok = true, offseason = summary, switched = switched }
 	end
 end
 

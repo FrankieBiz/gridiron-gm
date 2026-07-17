@@ -35,6 +35,8 @@ local Remotes = {
 	GetSeason = getOrCreate("RemoteFunction", "GetSeason") :: RemoteFunction,
 	-- (player, facilityKey) -> spend coaching credits to upgrade a facility
 	UpgradeFacility = getOrCreate("RemoteFunction", "UpgradeFacility") :: RemoteFunction,
+	-- (player, teamId) -> stay or take a job offer; runs the offseason into next season
+	ChooseJob = getOrCreate("RemoteFunction", "ChooseJob") :: RemoteFunction,
 }
 
 return Remotes

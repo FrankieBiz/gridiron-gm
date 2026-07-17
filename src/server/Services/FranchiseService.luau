@@ -13,6 +13,7 @@ local Generator = require(script.Parent.Parent.Data.Generator)
 local Schedule = require(script.Parent.Parent.League.Schedule)
 local Standings = require(script.Parent.Parent.League.Standings)
 local SeasonController = require(script.Parent.Parent.League.SeasonController)
+local CareerController = require(script.Parent.Parent.League.CareerController)
 
 local FranchiseService = {}
 
@@ -43,6 +44,7 @@ local function buildState(f: any)
 		table.insert(teams, teamSummary(t))
 	end
 	f.facilities = f.facilities or table.clone(Facilities.default)
+	local prestige = (f.league[f.teamId].prestige or 3)
 	return {
 		ok = true,
 		hasFranchise = true,
@@ -52,6 +54,10 @@ local function buildState(f: any)
 		record = Standings.recordFor(f.season.teamIds, f.season.results, f.teamId),
 		coachingCredits = f.coachingCredits,
 		facilities = f.facilities,
+		coach = f.coach,
+		prestige = prestige,
+		expectedWins = CareerController.expectedWins(prestige),
+		pendingCareer = f.pendingCareer or false,
 		season = {
 			year = f.season.year,
 			week = f.season.week,
@@ -87,6 +93,8 @@ function FranchiseService:Start()
 			league = league,
 			coachingCredits = 0,
 			facilities = table.clone(Facilities.default),
+			coach = CareerController.newCoach(teamId),
+			pendingCareer = false,
 			season = SeasonController.new(teamIds, Schedule.generate(teamIds)),
 		}
 		print(string.format("[GRIDIRON] %s started a franchise with %s.", player.Name, teamId))

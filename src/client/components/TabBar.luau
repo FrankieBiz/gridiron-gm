@@ -17,6 +17,7 @@ local TABS = {
 	{ id = "Roster", icon = "📋" },
 	{ id = "League", icon = "🏆" },
 	{ id = "HQ", icon = "🏟️" },
+	{ id = "Career", icon = "💼" },
 }
 
 local function TabBar(props: Props)

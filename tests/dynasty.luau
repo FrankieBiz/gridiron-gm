@@ -12,6 +12,7 @@ local Development = require("../src/server/League/Development")
 local DraftClass = require("../src/server/League/DraftClass")
 local Draft = require("../src/server/League/Draft")
 local OffseasonController = require("../src/server/League/OffseasonController")
+local CareerController = require("../src/server/League/CareerController")
 
 local league = Generator.buildLeague(Teams, 2026)
 local teamIds = {}
@@ -58,6 +59,7 @@ local function bestOverall(roster)
 end
 
 local myId = f.teamId
+local coach = CareerController.newCoach(myId)
 print(
 	string.format(
 		"Managing %s. Starting roster: %d players, avg age %.1f, best OVR %d\n",
@@ -85,6 +87,28 @@ for s = 1, 3 do
 		)
 	)
 
+	local ranked = Standings.compute(f.season.teamIds, f.season.results)
+	local rank = 99
+	for i, row in ranked do
+		if row.teamId == myId then
+			rank = i
+			break
+		end
+	end
+	local report =
+		CareerController.evaluate(coach, rec, champ == myId, rank <= 4, league[myId].prestige or 3)
+	local offers =
+		CareerController.generateOffers(coach, league, myId, report.fired, f.seed + f.season.year)
+	print(
+		string.format(
+			"  Career: rep %d, security %d, fired=%s, %d offers",
+			math.floor(coach.reputation),
+			math.floor(coach.jobSecurity),
+			tostring(report.fired),
+			#offers
+		)
+	)
+
 	local summary = OffseasonController.run(f, deps, f.seed)
 	print(
 		string.format(
@@ -109,4 +133,13 @@ end
 assert(f.season.year == 4, "should be entering year 4")
 assert(#league[myId].roster >= 15, "roster should not have collapsed")
 assert(#f.history.seasons == 3, "history should record 3 seasons")
-print("Dynasty loop ran 3 seasons cleanly. ✓")
+assert(coach.seasonsCoached == 3, "coach should have 3 seasons")
+print(
+	string.format(
+		"Career: %d-%d, %d titles, rep %d. Dynasty + career ran cleanly. ✓",
+		coach.careerWins,
+		coach.careerLosses,
+		coach.championships,
+		math.floor(coach.reputation)
+	)
+)

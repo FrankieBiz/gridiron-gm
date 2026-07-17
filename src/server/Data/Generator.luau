@@ -27,7 +27,7 @@ type TeamIdentity = {
 	secondary: string,
 }
 
-type Team = TeamIdentity & { roster: { Player } }
+type Team = TeamIdentity & { roster: { Player }, prestige: number }
 
 local Generator = {}
 
@@ -181,6 +181,7 @@ function Generator.buildLeague(identities: { TeamIdentity }, seed: number): { [s
 			abbr = identity.abbr,
 			primary = identity.primary,
 			secondary = identity.secondary,
+			prestige = math.clamp(math.floor((teamBase - 64) / 3.6), 1, 5), -- 1 (bottom) .. 5 (blue-blood)
 			roster = Generator.rosterFor(identity.id, teamBase, seed + rng.int(1, 1000000)),
 		}
 		league[identity.id] = team
