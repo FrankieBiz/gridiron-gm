@@ -4,6 +4,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local React = require(ReplicatedStorage.Packages.React)
 local Theme = require(script.Parent.Parent.Theme)
+local PlayerCard = require(script.Parent.Parent.components.PlayerCard)
 
 local e = React.createElement
 
@@ -12,6 +13,8 @@ type Props = {
 }
 
 local function Roster(props: Props)
+	local selected, setSelected = React.useState(nil :: any)
+
 	local sorted = table.clone(props.team.roster)
 	table.sort(sorted, function(a, b)
 		return a.overall > b.overall
@@ -24,11 +27,16 @@ local function Roster(props: Props)
 		),
 	}
 	for i, p in sorted do
-		rows["p_" .. p.id] = e("Frame", {
+		rows["p_" .. p.id] = e("TextButton", {
+			Text = "",
+			AutoButtonColor = true,
 			BackgroundColor3 = Theme.field2,
 			Size = UDim2.new(1, -12, 0, 50),
 			LayoutOrder = i,
 			BorderSizePixel = 0,
+			[React.Event.Activated] = function()
+				setSelected(p)
+			end,
 		}, {
 			corner = e("UICorner", { CornerRadius = UDim.new(0, 8) }),
 			dev = e("Frame", {
@@ -103,6 +111,16 @@ local function Roster(props: Props)
 			Position = UDim2.fromOffset(14, 12),
 			Size = UDim2.fromOffset(260, 16),
 		}),
+		hint = e("TextLabel", {
+			Text = "tap a player for details",
+			Font = Theme.font.body,
+			TextScaled = true,
+			TextColor3 = Theme.chalkSoft,
+			BackgroundTransparency = 1,
+			TextXAlignment = Enum.TextXAlignment.Right,
+			Position = UDim2.new(1, -140, 0, 12),
+			Size = UDim2.fromOffset(126, 16),
+		}, { max = e("UITextSizeConstraint", { MaxTextSize = 12 }) }),
 		list = e("ScrollingFrame", {
 			Size = UDim2.new(1, -24, 1, -46),
 			Position = UDim2.fromOffset(12, 36),
@@ -112,6 +130,14 @@ local function Roster(props: Props)
 			CanvasSize = UDim2.new(0, 0, 0, 0),
 			AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		}, rows),
+		modal = if selected
+			then e(PlayerCard, {
+				player = selected,
+				onClose = function()
+					setSelected(nil)
+				end,
+			})
+			else nil,
 	})
 end
 

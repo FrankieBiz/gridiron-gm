@@ -19,6 +19,7 @@ local OffseasonController = require(script.Parent.Parent.League.OffseasonControl
 local CareerController = require(script.Parent.Parent.League.CareerController)
 local Awards = require(script.Parent.Parent.League.Awards)
 local Stats = require(script.Parent.Parent.League.Stats)
+local News = require(script.Parent.Parent.League.News)
 
 local SeasonService = {}
 
@@ -64,6 +65,18 @@ function SeasonService:Start()
 			if g.homeId == f.teamId or g.awayId == f.teamId then
 				mine = g
 				break
+			end
+		end
+
+		-- In-season headlines (your result + biggest blowout), newest-first, capped.
+		if #out.games > 0 then
+			f.news = f.news or {}
+			local weekly = News.weekly(out.games, f.league, f.teamId, out.label)
+			for i = #weekly, 1, -1 do
+				table.insert(f.news, 1, weekly[i])
+			end
+			while #f.news > 60 do
+				table.remove(f.news)
 			end
 		end
 

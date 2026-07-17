@@ -109,4 +109,63 @@ function News.fromOffseason(
 	return items
 end
 
+-- One or two headlines from a week of games: your result + the biggest blowout.
+-- games: the week's full GameResults. league: id -> team. myTeamId, label (e.g. "Week 4").
+function News.weekly(
+	games: { any },
+	league: any,
+	myTeamId: string,
+	label: string
+): { { text: string, kind: string } }
+	local items: { { text: string, kind: string } } = {}
+	local function nameOf(id: string): string
+		return league[id] and league[id].name or id
+	end
+
+	for _, g in games do
+		if g.homeId == myTeamId or g.awayId == myTeamId then
+			local iWon = g.winnerId == myTeamId
+			local myScore = if g.homeId == myTeamId then g.home.score else g.away.score
+			local oppScore = if g.homeId == myTeamId then g.away.score else g.home.score
+			local oppId = if g.homeId == myTeamId then g.awayId else g.homeId
+			table.insert(items, {
+				kind = if iWon then "award" else "retire",
+				text = string.format(
+					"%s: %s %s %d-%d vs %s",
+					label,
+					nameOf(myTeamId),
+					if iWon then "beat" else "lost to",
+					myScore,
+					oppScore,
+					nameOf(oppId)
+				),
+			})
+			break
+		end
+	end
+
+	local best, bestMargin = nil, -1
+	for _, g in games do
+		local margin = math.abs(g.home.score - g.away.score)
+		if margin > bestMargin then
+			bestMargin = margin
+			best = g
+		end
+	end
+	if best and bestMargin >= 21 then
+		local loserId = if best.winnerId == best.homeId then best.awayId else best.homeId
+		table.insert(items, {
+			kind = "league",
+			text = string.format(
+				"Around the league: %s routed %s by %d.",
+				nameOf(best.winnerId),
+				nameOf(loserId),
+				bestMargin
+			),
+		})
+	end
+
+	return items
+end
+
 return News
