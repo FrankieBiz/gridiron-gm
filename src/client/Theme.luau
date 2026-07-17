@@ -20,4 +20,24 @@ function Theme.hex(hex: string): Color3
 	return Color3.fromRGB(r, g, b)
 end
 
+-- Dev-trait accent (normal/star/superstar).
+function Theme.devColor(trait: string?): Color3
+	if trait == "superstar" then
+		return Theme.flag
+	elseif trait == "star" then
+		return Theme.gold
+	end
+	return Theme.chalkSoft
+end
+
+-- Overall-rating color ramp.
+function Theme.ovrColor(ovr: number): Color3
+	if ovr >= 85 then
+		return Theme.gold
+	elseif ovr >= 75 then
+		return Theme.chalk
+	end
+	return Theme.chalkSoft
+end
+
 return Theme

@@ -1,7 +1,7 @@
 --!strict
--- Root component: owns screen + franchise state, talks to the server via Remotes,
--- and renders the current screen. State is small enough for useState here; Reflex
--- comes in Slice 2 when season state grows.
+-- Root controller: owns app state, talks to the server via Remotes, and routes between
+-- the menu, the tabbed main app (Season / Roster / League), the game result, and the
+-- offseason recap. State via React hooks passed down as props (simple + robust).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -9,72 +9,104 @@ local React = require(ReplicatedStorage.Packages.React)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Theme = require(script.Parent.Theme)
 
+local TopBar = require(script.Parent.components.TopBar)
+local TabBar = require(script.Parent.components.TabBar)
 local Menu = require(script.Parent.screens.Menu)
 local TeamSelect = require(script.Parent.screens.TeamSelect)
-local TeamOverview = require(script.Parent.screens.TeamOverview)
+local Dashboard = require(script.Parent.screens.Dashboard)
+local Roster = require(script.Parent.screens.Roster)
+local LeagueTable = require(script.Parent.screens.LeagueTable)
 local GameResult = require(script.Parent.screens.GameResult)
+local Offseason = require(script.Parent.screens.Offseason)
 
 local e = React.createElement
 
-type Record = { wins: number, losses: number, gamesPlayed: number }
+local function fetchAll(): any?
+	local st = Remotes.GetState:InvokeServer()
+	if not (st and st.ok and st.hasFranchise) then
+		return nil
+	end
+	local se = Remotes.GetSeason:InvokeServer()
+	return {
+		teamId = st.teamId,
+		team = st.team,
+		teams = st.teams,
+		credits = st.coachingCredits or 0,
+		record = st.record,
+		season = st.season,
+		standings = (se and se.ok and se.standings) or {},
+		schedule = (se and se.ok and se.schedule) or {},
+	}
+end
 
 local function App()
 	local screen, setScreen = React.useState("loading")
-	local franchise, setFranchise = React.useState(nil :: any) -- { teamId, team, teams }
-	local record, setRecord = React.useState({ wins = 0, losses = 0, gamesPlayed = 0 } :: Record)
+	local tab, setTab = React.useState("Season")
+	local data, setData = React.useState(nil :: any)
 	local lastGame, setLastGame = React.useState(nil :: any)
+	local pendingOffseason, setPendingOffseason = React.useState(nil :: any)
 
-	-- Initial load: resume an existing franchise if the save has one.
 	React.useEffect(function()
 		task.spawn(function()
-			local res = Remotes.GetState:InvokeServer()
-			if res and res.ok and res.hasFranchise then
-				setFranchise({ teamId = res.teamId, team = res.team, teams = res.teams })
-				setRecord(res.record)
+			local d = fetchAll()
+			if d then
+				setData(d)
 			end
 			setScreen("menu")
 		end)
 	end, {})
 
-	local onNew = React.useCallback(function()
-		setScreen("select")
-	end, {})
-
-	local onContinue = React.useCallback(function()
-		setScreen("overview")
-	end, {})
-
-	local onPick = React.useCallback(function(teamId: string)
+	local pickTeam = React.useCallback(function(teamId: string)
 		task.spawn(function()
 			local res = Remotes.NewFranchise:InvokeServer(teamId)
 			if res and res.ok then
-				setFranchise({ teamId = res.teamId, team = res.team, teams = res.teams })
-				setRecord(res.record)
-				setScreen("overview")
+				local d = fetchAll()
+				if d then
+					setData(d)
+					setTab("Season")
+					setScreen("app")
+				end
 			end
 		end)
 	end, {})
 
-	local onSim = React.useCallback(function()
+	local simWeek = React.useCallback(function()
 		task.spawn(function()
 			local res = Remotes.SimGame:InvokeServer()
 			if res and res.ok then
 				setLastGame(res)
-				setRecord(res.record)
-				setScreen("result")
+				if res.offseason then
+					setPendingOffseason(res.offseason)
+					setScreen("offseason") -- recap first, then play the opening game
+				else
+					setScreen("result")
+				end
 			end
 		end)
 	end, {})
 
-	local onDone = React.useCallback(function()
-		setScreen("overview")
+	local offseasonDone = React.useCallback(function()
+		setScreen("result")
 	end, {})
 
-	local onBackToMenu = React.useCallback(function()
+	local resultDone = React.useCallback(function()
+		task.spawn(function()
+			local d = fetchAll()
+			if d then
+				setData(d)
+			end
+			setPendingOffseason(nil)
+			setScreen("app")
+		end)
+	end, {})
+
+	local backToMenu = React.useCallback(function()
 		setScreen("menu")
 	end, {})
 
+	-- ---- routing ----
 	local body
+
 	if screen == "loading" then
 		body = e("TextLabel", {
 			Text = "LOADING…",
@@ -86,28 +118,64 @@ local function App()
 			Position = UDim2.fromScale(0.3, 0.45),
 		})
 	elseif screen == "menu" then
-		body = e(Menu, { hasFranchise = franchise ~= nil, onNew = onNew, onContinue = onContinue })
+		body = e(Menu, {
+			hasFranchise = data ~= nil,
+			onNew = function()
+				setScreen("select")
+			end,
+			onContinue = function()
+				setScreen("app")
+			end,
+		})
 	elseif screen == "select" then
-		body = e(TeamSelect, { onPick = onPick, onBack = onBackToMenu })
-	elseif screen == "overview" and franchise then
-		body = e(
-			TeamOverview,
-			{ team = franchise.team, record = record, onSim = onSim, onBack = onBackToMenu }
-		)
+		body = e(TeamSelect, { onPick = pickTeam, onBack = backToMenu })
 	elseif screen == "result" and lastGame then
-		body = e(
-			GameResult,
-			{ game = lastGame, teamId = franchise and franchise.teamId, onDone = onDone }
-		)
+		body =
+			e(GameResult, { game = lastGame, teamId = data and data.teamId, onDone = resultDone })
+	elseif screen == "offseason" and pendingOffseason and data then
+		body =
+			e(Offseason, { summary = pendingOffseason, teams = data.teams, onDone = offseasonDone })
+	elseif screen == "app" and data then
+		local content
+		if tab == "Season" then
+			content = e(Dashboard, {
+				teamId = data.teamId,
+				teams = data.teams,
+				season = data.season,
+				standings = data.standings,
+				schedule = data.schedule,
+				onSim = simWeek,
+			})
+		elseif tab == "Roster" then
+			content = e(Roster, { team = data.team })
+		else
+			content = e(
+				LeagueTable,
+				{ teamId = data.teamId, teams = data.teams, standings = data.standings }
+			)
+		end
+
+		body = e("Frame", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1 }, {
+			top = e(TopBar, {
+				team = data.team,
+				record = data.record,
+				season = data.season,
+				credits = data.credits,
+			}),
+			content = e("Frame", {
+				BackgroundTransparency = 1,
+				Position = UDim2.fromOffset(0, 74),
+				Size = UDim2.new(1, 0, 1, -134),
+			}, { screen = content }),
+			tabs = e(TabBar, { active = tab, onSelect = setTab }),
+		})
 	end
 
 	return e("Frame", {
 		Size = UDim2.fromScale(1, 1),
 		BackgroundColor3 = Theme.field,
 		BorderSizePixel = 0,
-	}, {
-		body = body,
-	})
+	}, { body = body })
 end
 
 return App
