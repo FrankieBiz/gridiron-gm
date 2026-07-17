@@ -18,6 +18,7 @@ local Roster = require(script.Parent.screens.Roster)
 local LeagueTable = require(script.Parent.screens.LeagueTable)
 local GameResult = require(script.Parent.screens.GameResult)
 local Offseason = require(script.Parent.screens.Offseason)
+local Facilities = require(script.Parent.screens.Facilities)
 
 local e = React.createElement
 
@@ -34,6 +35,7 @@ local function fetchAll(): any?
 		credits = st.coachingCredits or 0,
 		record = st.record,
 		season = st.season,
+		facilities = st.facilities or { training = 1, rehab = 1, stadium = 1 },
 		standings = (se and se.ok and se.standings) or {},
 		schedule = (se and se.ok and se.schedule) or {},
 	}
@@ -104,6 +106,18 @@ local function App()
 		setScreen("menu")
 	end, {})
 
+	local upgradeFacility = React.useCallback(function(key: string)
+		task.spawn(function()
+			local res = Remotes.UpgradeFacility:InvokeServer(key)
+			if res and res.ok then
+				local d = fetchAll()
+				if d then
+					setData(d)
+				end
+			end
+		end)
+	end, {})
+
 	-- ---- routing ----
 	local body
 
@@ -148,11 +162,17 @@ local function App()
 			})
 		elseif tab == "Roster" then
 			content = e(Roster, { team = data.team })
-		else
+		elseif tab == "League" then
 			content = e(
 				LeagueTable,
 				{ teamId = data.teamId, teams = data.teams, standings = data.standings }
 			)
+		else
+			content = e(Facilities, {
+				facilities = data.facilities,
+				credits = data.credits,
+				onUpgrade = upgradeFacility,
+			})
 		end
 
 		body = e("Frame", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1 }, {
@@ -164,8 +184,8 @@ local function App()
 			}),
 			content = e("Frame", {
 				BackgroundTransparency = 1,
-				Position = UDim2.fromOffset(0, 74),
-				Size = UDim2.new(1, 0, 1, -134),
+				Position = UDim2.fromOffset(0, 82),
+				Size = UDim2.new(1, 0, 1, -146),
 			}, { screen = content }),
 			tabs = e(TabBar, { active = tab, onSelect = setTab }),
 		})
@@ -175,7 +195,13 @@ local function App()
 		Size = UDim2.fromScale(1, 1),
 		BackgroundColor3 = Theme.field,
 		BorderSizePixel = 0,
-	}, { body = body })
+	}, {
+		bg = e("UIGradient", {
+			Rotation = 90,
+			Color = ColorSequence.new(Theme.bgTop, Theme.bgBottom),
+		}),
+		body = body,
+	})
 end
 
 return App

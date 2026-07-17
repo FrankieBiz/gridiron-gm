@@ -30,14 +30,21 @@ local function makeRng(seed: number)
 	}
 end
 
+-- opts: { trainingLevel: number?, rehabLevel: number? } — facility bonuses (default 1).
 -- Returns { roster = survivors (aged/developed), retirees = removed players }.
 function Development.ageAndDevelop(
 	roster: { any },
-	seed: number
+	seed: number,
+	opts: { trainingLevel: number?, rehabLevel: number? }?
 ): { roster: { any }, retirees: { any } }
 	local rng = makeRng(seed)
 	local survivors: { any } = {}
 	local retirees: { any } = {}
+
+	local trainingLevel = (opts and opts.trainingLevel) or 1
+	local rehabLevel = (opts and opts.rehabLevel) or 1
+	local trainingBonus = 1 + (trainingLevel - 1) * 0.06 -- better facility -> faster growth
+	local rehabFactor = 1 - (rehabLevel - 1) * 0.05 -- better medical -> less retirement/decline
 
 	for _, p in roster do
 		local age = p.age + 1
@@ -46,9 +53,9 @@ function Development.ageAndDevelop(
 		if age >= 38 then
 			retire = true
 		elseif age >= 35 then
-			retire = rng.float() < 0.45
+			retire = rng.float() < 0.45 * rehabFactor
 		elseif age >= 33 then
-			retire = rng.float() < 0.18
+			retire = rng.float() < 0.18 * rehabFactor
 		end
 
 		if retire then
@@ -62,12 +69,12 @@ function Development.ageAndDevelop(
 			local delta: number
 			if age <= peak then
 				local gap = math.max(0, p.potential - p.overall)
-				delta = math.floor(gap * 0.22 * mult + rng.range(0, 1.5))
+				delta = math.floor(gap * 0.22 * mult * trainingBonus + rng.range(0, 1.5))
 				if delta < 1 and gap > 0 then
 					delta = 1
 				end
 			else
-				delta = -math.floor((age - peak) * rng.range(1.0, 2.2))
+				delta = -math.floor((age - peak) * rng.range(1.0, 2.2) * rehabFactor)
 			end
 
 			local ceiling = math.max(p.overall, p.potential)

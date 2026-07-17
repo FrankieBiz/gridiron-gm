@@ -4,6 +4,11 @@
 -- lives in these services; the client only requests and displays.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+
+-- This is a UI-only management game — no 3D avatar. Stop spawning characters so the
+-- player doesn't fall through the empty world and die on a loop.
+Players.CharacterAutoLoads = false
 
 local ServiceLoader = require(ReplicatedStorage.Shared.Modules.core.ServiceLoader)
 

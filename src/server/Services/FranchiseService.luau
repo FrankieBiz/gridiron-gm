@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Teams = require(ReplicatedStorage.Shared.Data.Teams)
+local Facilities = require(ReplicatedStorage.Shared.Data.Facilities)
 
 local SaveService = require(script.Parent.SaveService)
 local Generator = require(script.Parent.Parent.Data.Generator)
@@ -41,6 +42,7 @@ local function buildState(f: any)
 	for _, t in Teams do
 		table.insert(teams, teamSummary(t))
 	end
+	f.facilities = f.facilities or table.clone(Facilities.default)
 	return {
 		ok = true,
 		hasFranchise = true,
@@ -49,6 +51,7 @@ local function buildState(f: any)
 		teams = teams,
 		record = Standings.recordFor(f.season.teamIds, f.season.results, f.teamId),
 		coachingCredits = f.coachingCredits,
+		facilities = f.facilities,
 		season = {
 			year = f.season.year,
 			week = f.season.week,
@@ -83,6 +86,7 @@ function FranchiseService:Start()
 			seed = seed,
 			league = league,
 			coachingCredits = 0,
+			facilities = table.clone(Facilities.default),
 			season = SeasonController.new(teamIds, Schedule.generate(teamIds)),
 		}
 		print(string.format("[GRIDIRON] %s started a franchise with %s.", player.Name, teamId))
@@ -98,6 +102,32 @@ function FranchiseService:Start()
 			return { ok = true, hasFranchise = false }
 		end
 		return buildState(profile.Data.franchise)
+	end
+
+	Remotes.UpgradeFacility.OnServerInvoke = function(player: Player, key: any)
+		if type(key) ~= "string" then
+			return { ok = false, error = "bad key" }
+		end
+		local profile = SaveService.get(player)
+		if not profile or not profile.Data.franchise then
+			return { ok = false, error = "no franchise" }
+		end
+		local f = profile.Data.franchise
+		f.facilities = f.facilities or table.clone(Facilities.default)
+		local level = f.facilities[key]
+		if level == nil then
+			return { ok = false, error = "unknown facility" }
+		end
+		if level >= Facilities.MAX_LEVEL then
+			return { ok = false, error = "maxed out" }
+		end
+		local cost = Facilities.costForNext(level)
+		if (f.coachingCredits or 0) < cost then
+			return { ok = false, error = "not enough credits" }
+		end
+		f.coachingCredits -= cost
+		f.facilities[key] = level + 1
+		return buildState(f)
 	end
 end
 

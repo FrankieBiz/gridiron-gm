@@ -1,5 +1,5 @@
 --!strict
--- Bottom tab bar for the main app (Season / Roster / League).
+-- Bottom tab bar. Active tab shows a filled rounded pill; each tab has an icon.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local React = require(ReplicatedStorage.Packages.React)
@@ -12,7 +12,12 @@ type Props = {
 	onSelect: (tab: string) -> (),
 }
 
-local TABS = { "Season", "Roster", "League" }
+local TABS = {
+	{ id = "Season", icon = "🏈" },
+	{ id = "Roster", icon = "📋" },
+	{ id = "League", icon = "🏆" },
+	{ id = "HQ", icon = "🏟️" },
+}
 
 local function TabBar(props: Props)
 	local children: { [string]: any } = {
@@ -20,48 +25,63 @@ local function TabBar(props: Props)
 			FillDirection = Enum.FillDirection.Horizontal,
 			HorizontalAlignment = Enum.HorizontalAlignment.Center,
 			VerticalAlignment = Enum.VerticalAlignment.Center,
-			Padding = UDim.new(0, 0),
 			SortOrder = Enum.SortOrder.LayoutOrder,
 		}),
+		topline = e("Frame", {
+			BackgroundColor3 = Theme.line,
+			Size = UDim2.new(1, 0, 0, 1),
+			Position = UDim2.new(0, 0, 0, 0),
+			BorderSizePixel = 0,
+			ZIndex = 3,
+		}),
 	}
+
 	for i, tab in TABS do
-		local isActive = props.active == tab
-		children["tab_" .. tab] = e("TextButton", {
-			Text = string.upper(tab),
-			Font = Enum.Font.GothamBlack,
-			TextScaled = true,
-			TextColor3 = if isActive then Theme.flag else Theme.chalkSoft,
-			BackgroundColor3 = Theme.field3,
+		local isActive = props.active == tab.id
+		children["tab_" .. tab.id] = e("TextButton", {
+			Text = "",
+			BackgroundTransparency = 1,
 			Size = UDim2.fromScale(1 / #TABS, 1),
 			LayoutOrder = i,
-			BorderSizePixel = 0,
-			AutoButtonColor = true,
+			AutoButtonColor = false,
 			[React.Event.Activated] = function()
-				props.onSelect(tab)
+				props.onSelect(tab.id)
 			end,
 		}, {
-			pad = e("UIPadding", {
-				PaddingTop = UDim.new(0, 12),
-				PaddingBottom = UDim.new(0, 12),
-				PaddingLeft = UDim.new(0, 10),
-				PaddingRight = UDim.new(0, 10),
+			pill = e("Frame", {
+				BackgroundColor3 = Theme.flag,
+				BackgroundTransparency = if isActive then 0 else 1,
+				Size = UDim2.new(1, -14, 1, -16),
+				Position = UDim2.fromScale(0.5, 0.5),
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				BorderSizePixel = 0,
+			}, {
+				corner = e("UICorner", { CornerRadius = UDim.new(0, 12) }),
+				grad = if isActive
+					then e(
+						"UIGradient",
+						{ Rotation = 90, Color = ColorSequence.new(Theme.flag, Theme.flagDeep) }
+					)
+					else nil,
+				label = e("TextLabel", {
+					Text = tab.icon .. "  " .. string.upper(tab.id),
+					Font = Theme.font.bold,
+					TextScaled = true,
+					TextColor3 = if isActive then Theme.chalk else Theme.chalkSoft,
+					BackgroundTransparency = 1,
+					Size = UDim2.fromScale(0.86, 0.42),
+					Position = UDim2.fromScale(0.07, 0.29),
+				}, { max = e("UITextSizeConstraint", { MaxTextSize = 13 }) }),
 			}),
-			bar = if isActive
-				then e("Frame", {
-					BackgroundColor3 = Theme.flag,
-					Size = UDim2.new(1, 0, 0, 3),
-					Position = UDim2.new(0, 0, 0, 0),
-					BorderSizePixel = 0,
-				})
-				else nil,
 		})
 	end
 
 	return e("Frame", {
-		Size = UDim2.new(1, 0, 0, 60),
-		Position = UDim2.new(0, 0, 1, -60),
+		Size = UDim2.new(1, 0, 0, 64),
+		Position = UDim2.new(0, 0, 1, -64),
 		BackgroundColor3 = Theme.field3,
 		BorderSizePixel = 0,
+		ZIndex = 2,
 	}, children)
 end
 

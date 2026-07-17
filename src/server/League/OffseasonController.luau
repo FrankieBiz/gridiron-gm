@@ -30,11 +30,16 @@ function OffseasonController.run(f: any, deps: Deps, baseSeed: number)
 		table.insert(order, ranked[i].teamId)
 	end
 
-	-- Age & develop every roster; capture the player's retirements for the news feed.
+	-- Age & develop every roster; the player's facilities boost their own team's growth.
+	local facilities = f.facilities or { training = 1, rehab = 1, stadium = 1 }
 	local myRetirees: { any } = {}
 	for _, teamId in teamIds do
 		local team = f.league[teamId]
-		local res = deps.Development.ageAndDevelop(team.roster, baseSeed + year * 13 + #team.roster)
+		local opts = if teamId == f.teamId
+			then { trainingLevel = facilities.training, rehabLevel = facilities.rehab }
+			else nil
+		local res =
+			deps.Development.ageAndDevelop(team.roster, baseSeed + year * 13 + #team.roster, opts)
 		team.roster = res.roster
 		if teamId == f.teamId then
 			myRetirees = res.retirees
@@ -61,7 +66,8 @@ function OffseasonController.run(f: any, deps: Deps, baseSeed: number)
 	-- Coaching credits: base + a credit per win + championship bonus.
 	local rec = deps.Standings.recordFor(teamIds, season.results, f.teamId)
 	local champion = season.playoffs and season.playoffs.champion
-	local creditsEarned = 10 + rec.wins + (if champion == f.teamId then 25 else 0)
+	local stadiumBonus = (facilities.stadium - 1) * 2 -- bigger stadium -> more credits
+	local creditsEarned = 10 + rec.wins + (if champion == f.teamId then 25 else 0) + stadiumBonus
 	f.coachingCredits = (f.coachingCredits or 0) + creditsEarned
 
 	-- Franchise history (append-only — feeds records / Hall of Fame later).

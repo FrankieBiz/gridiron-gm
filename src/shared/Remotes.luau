@@ -33,6 +33,8 @@ local Remotes = {
 	GetState = getOrCreate("RemoteFunction", "GetState") :: RemoteFunction,
 	-- (player) -> full season: schedule, standings, phase (for the season dashboard)
 	GetSeason = getOrCreate("RemoteFunction", "GetSeason") :: RemoteFunction,
+	-- (player, facilityKey) -> spend coaching credits to upgrade a facility
+	UpgradeFacility = getOrCreate("RemoteFunction", "UpgradeFacility") :: RemoteFunction,
 }
 
 return Remotes
