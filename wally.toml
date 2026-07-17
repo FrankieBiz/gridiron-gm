@@ -4,11 +4,17 @@ version = "0.1.0"
 registry = "https://github.com/UpliftGames/wally-index"
 realm = "shared"
 
-# ProfileStore is vendored in /vendor (not on Wally). React-lua drives the UI.
-# Reflex is intentionally deferred until season state grows (Slice 2).
+# ProfileStore is vendored in /vendor (not on Wally). React-lua drives the UI,
+# Charm drives UI state, plus the core production utilities.
 [dependencies]
 React = "jsdotlua/react@17.2.1"
 ReactRoblox = "jsdotlua/react-roblox@17.2.1"
+Charm = "littensy/charm@0.11.0"
+CharmSync = "littensy/charm-sync@0.4.0"
+ReactCharm = "littensy/react-charm@0.4.0"
+Signal = "sleitnick/signal@2.0.3"
+Janitor = "howmanysmall/janitor@1.18.3"
+Sift = "csqrl/sift@0.0.11"
 
 [server-dependencies]
 

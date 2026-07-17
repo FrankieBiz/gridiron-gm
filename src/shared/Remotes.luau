@@ -31,6 +31,8 @@ local Remotes = {
 	SimGame = getOrCreate("RemoteFunction", "SimGame") :: RemoteFunction,
 	-- (player) -> current franchise state (for reconnect / initial load)
 	GetState = getOrCreate("RemoteFunction", "GetState") :: RemoteFunction,
+	-- (player) -> full season: schedule, standings, phase (for the season dashboard)
+	GetSeason = getOrCreate("RemoteFunction", "GetSeason") :: RemoteFunction,
 }
 
 return Remotes
