@@ -77,6 +77,38 @@ local Teams: { TeamIdentity } = {
 		primary = "#8A3B12",
 		secondary = "#EDA24B",
 	},
+	{
+		id = "HAR",
+		city = "Harbor City",
+		name = "Kraken",
+		abbr = "HAR",
+		primary = "#0E3B4A",
+		secondary = "#3FD0C9",
+	},
+	{
+		id = "MES",
+		city = "Mesa Verde",
+		name = "Coyotes",
+		abbr = "MES",
+		primary = "#7C4A1E",
+		secondary = "#E0B15A",
+	},
+	{
+		id = "NOR",
+		city = "Northgate",
+		name = "Sentinels",
+		abbr = "NOR",
+		primary = "#22303A",
+		secondary = "#A9B7C2",
+	},
+	{
+		id = "VOL",
+		city = "Volta",
+		name = "Surge",
+		abbr = "VOL",
+		primary = "#3A1C5A",
+		secondary = "#F2D648",
+	},
 }
 
 return Teams
