@@ -43,6 +43,10 @@ local Remotes = {
 	ScoutProspect = getOrCreate("RemoteFunction", "ScoutProspect") :: RemoteFunction,
 	-- (player, prospectId) -> draft that prospect; AI fills to your next pick / draft end
 	MakePick = getOrCreate("RemoteFunction", "MakePick") :: RemoteFunction,
+	-- (player, freeAgentId) -> sign a free agent with coaching credits
+	SignFreeAgent = getOrCreate("RemoteFunction", "SignFreeAgent") :: RemoteFunction,
+	-- (player) -> close free agency and start the next season
+	FinishOffseason = getOrCreate("RemoteFunction", "FinishOffseason") :: RemoteFunction,
 }
 
 return Remotes

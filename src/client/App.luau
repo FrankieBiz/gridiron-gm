@@ -23,6 +23,7 @@ local CareerDecision = require(script.Parent.screens.CareerDecision)
 local CareerProfile = require(script.Parent.screens.CareerProfile)
 local History = require(script.Parent.screens.History)
 local DraftRoom = require(script.Parent.screens.DraftRoom)
+local FreeAgency = require(script.Parent.screens.FreeAgency)
 
 local e = React.createElement
 
@@ -62,6 +63,7 @@ local function App()
 	local pendingOffseason, setPendingOffseason = React.useState(nil :: any)
 	local career, setCareer = React.useState(nil :: any)
 	local draft, setDraft = React.useState(nil :: any)
+	local freeAgents, setFreeAgents = React.useState(nil :: any)
 
 	React.useEffect(function()
 		task.spawn(function()
@@ -154,8 +156,47 @@ local function App()
 		end)
 	end, {})
 
+	-- After the offseason recap, open free agency (credits were just awarded).
 	local offseasonDone = React.useCallback(function()
-		refreshToApp()
+		task.spawn(function()
+			local d = fetchAll()
+			if d then
+				setData(d)
+				if d.freeAgents and #d.freeAgents > 0 then
+					setFreeAgents(d.freeAgents)
+					setScreen("freeagency")
+					return
+				end
+			end
+			setPendingOffseason(nil)
+			setScreen("app")
+		end)
+	end, {})
+
+	local signFreeAgent = React.useCallback(function(faId: string)
+		task.spawn(function()
+			local res = Remotes.SignFreeAgent:InvokeServer(faId)
+			if res and res.ok then
+				setFreeAgents(res.freeAgents)
+				setData(function(prev: any)
+					if not prev then
+						return prev
+					end
+					local updated = table.clone(prev)
+					updated.credits = res.credits
+					updated.freeAgents = res.freeAgents
+					return updated
+				end)
+			end
+		end)
+	end, {})
+
+	local finishOffseason = React.useCallback(function()
+		task.spawn(function()
+			Remotes.FinishOffseason:InvokeServer()
+			setFreeAgents(nil)
+			refreshToApp()
+		end)
 	end, { refreshToApp })
 
 	local backToMenu = React.useCallback(function()
@@ -207,6 +248,9 @@ local function App()
 							setScreen("app")
 						end
 					end)
+				elseif data and data.freeAgents and #data.freeAgents > 0 then
+					setFreeAgents(data.freeAgents)
+					setScreen("freeagency")
 				else
 					setScreen("app")
 				end
@@ -216,6 +260,13 @@ local function App()
 		body = e(TeamSelect, { onPick = pickTeam, onBack = backToMenu })
 	elseif screen == "draft" and draft then
 		body = e(DraftRoom, { draft = draft, onScout = scoutProspect, onPick = makePick })
+	elseif screen == "freeagency" and freeAgents and data then
+		body = e(FreeAgency, {
+			freeAgents = freeAgents,
+			credits = data.credits,
+			onSign = signFreeAgent,
+			onFinish = finishOffseason,
+		})
 	elseif screen == "result" and lastGame then
 		body =
 			e(GameResult, { game = lastGame, teamId = data and data.teamId, onDone = resultDone })

@@ -140,6 +140,35 @@ function DraftService:Start()
 		end
 		return { ok = true, done = false, draft = DraftBoard.view(f.draft, DraftClass) }
 	end
+
+	Remotes.SignFreeAgent.OnServerInvoke = function(player: Player, faId: any)
+		local profile = SaveService.get(player)
+		if not profile or not profile.Data.franchise then
+			return { ok = false, error = "no franchise" }
+		end
+		local f = profile.Data.franchise
+		if not f.freeAgents then
+			return { ok = false, error = "free agency not open" }
+		end
+		local signed = type(faId) == "string" and OffseasonController.signFreeAgent(f, faId)
+		return {
+			ok = signed,
+			freeAgents = f.freeAgents,
+			credits = f.coachingCredits,
+		}
+	end
+
+	Remotes.FinishOffseason.OnServerInvoke = function(player: Player)
+		local profile = SaveService.get(player)
+		if not profile or not profile.Data.franchise then
+			return { ok = false, error = "no franchise" }
+		end
+		local f = profile.Data.franchise
+		if f.freeAgents then
+			OffseasonController.startNextSeason(f, OFFSEASON_DEPS)
+		end
+		return { ok = true }
+	end
 end
 
 return DraftService
