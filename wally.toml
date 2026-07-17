@@ -4,12 +4,11 @@ version = "0.1.0"
 registry = "https://github.com/UpliftGames/wally-index"
 realm = "shared"
 
-# Phase 0 has no Wally runtime deps — ProfileStore is vendored in /vendor.
-# These turn on in Phase 1 (see the playbook). Uncomment when you get there:
+# ProfileStore is vendored in /vendor (not on Wally). React-lua drives the UI.
+# Reflex is intentionally deferred until season state grows (Slice 2).
 [dependencies]
-# React    = "jsdotlua/react@17.1.0"
-# ReactRoblox = "jsdotlua/react-roblox@17.1.0"
-# Reflex   = "littensy/reflex@4.3.1"
+React = "jsdotlua/react@17.2.1"
+ReactRoblox = "jsdotlua/react-roblox@17.2.1"
 
 [server-dependencies]
 

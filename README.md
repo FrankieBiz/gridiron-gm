@@ -35,23 +35,41 @@ Saves use **ProfileStore** (vendored in `/vendor/ProfileStore.luau`).
 ```
 default.project.json   Rojo tree: maps folders below into the DataModel
 src/shared/            → ReplicatedStorage.Shared   (code both sides use)
-  Types/Player.luau    the shared typed player struct
-  Remotes.luau         RemoteEvent accessor
-src/server/            → ServerScriptService.Server (sim engine, cap math, saves)
-src/client/            → StarterPlayerScripts.Client (UI; React-lua from Phase 1)
+  Types/               Player, Team, Game typed structs
+  Data/Teams.luau      the fictional league identities (Frank owns this)
+  Remotes.luau         RemoteFunction accessor (NewFranchise / SimGame / GetState)
+src/server/            → ServerScriptService.Server (authoritative)
+  Sim/Engine.luau      the simulation engine (pure Luau, drive-based)
+  Data/Generator.luau  procedural roster generator (pure Luau)
+  Data/SaveService.luau ProfileStore wrapper
+  init.server.luau     wires the remotes together
+src/client/            → StarterPlayerScripts.Client (React-lua UI)
+  App.luau             screen state machine + server calls
+  screens/             Menu, TeamSelect, TeamOverview, GameResult
+  components/Button.luau
 vendor/ProfileStore.luau → ServerStorage.ProfileStore (committed, not from Wally)
+tests/sim.luau         headless sim check (run with Lune, not part of the build)
 ```
 
-## Phase 0 smoke test
+## Current build — Slice 1 ("feel a game")
 
-Press **PING SERVER** in-game → the server prints the ping and increments a saved
-counter. Rejoin and the count persists. That proves client↔server messaging and
-ProfileStore saving — the Phase 0 Definition of Done.
+Launch → **New Franchise** → pick a team → **Sim Next Game** → watch the play-by-play
+reveal and the score climb, then win/loss. Your team + record persist across sessions.
+The sim is server-authoritative and deterministic (same seed → same game).
+
+## Verify the sim without Studio
+
+```sh
+lune run tests/sim.luau
+```
+Simulates 2000 games and prints score distribution + favorite win-rate (currently
+~23 pts/team avg, favorites win ~70%). Great for tuning the engine fast.
 
 ## Quality commands
 
 ```sh
-stylua src        # format
+stylua src tests  # format
 selene src        # lint
+rojo build default.project.json -o build.rbxlx   # validate the whole tree
 rojo sourcemap default.project.json -o sourcemap.json   # refresh LSP types
 ```

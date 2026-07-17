@@ -1,83 +1,127 @@
 --!strict
--- GRIDIRON GM — server entry point.
---
--- Phase 0 smoke test (satisfies the playbook's Definition of Done):
---   * a client button fires a RemoteEvent -> the server prints it
---   * one number saves per player via ProfileStore, persists, and loads on rejoin
---
--- Everything authoritative lives here. The client only asks and displays.
+-- GRIDIRON GM — server entry point. Authoritative: all sim + save logic lives here,
+-- the client only requests and displays.
 
-local Players = game:GetService("Players")
-local ServerStorage = game:GetService("ServerStorage")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Remotes = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes"))
-local ProfileStore = require(ServerStorage:WaitForChild("ProfileStore"))
+local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local Teams = require(ReplicatedStorage.Shared.Data.Teams)
+local SaveService = require(script.Data.SaveService)
+local Generator = require(script.Data.Generator)
+local Engine = require(script.Sim.Engine)
 
--- One number per player: how many times they've pinged the server.
-local PROFILE_TEMPLATE = {
-	pingCount = 0,
-}
+SaveService.init()
 
-local store = ProfileStore.New("PlayerData_v1", PROFILE_TEMPLATE)
-local profiles: { [Player]: any } = {}
-
-local function onPlayerAdded(player: Player)
-	local profile = store:StartSessionAsync("player_" .. player.UserId, {
-		Cancel = function()
-			return player.Parent ~= Players
-		end,
-	})
-
-	-- If the load failed, never let them in with default data (playbook §03).
-	if profile == nil then
-		player:Kick("Data load failed — please rejoin.")
-		return
-	end
-
-	profile:AddUserId(player.UserId)
-	profile:Reconcile() -- old saves gain any new template fields
-
-	profile.OnSessionEnd:Connect(function()
-		profiles[player] = nil
-		player:Kick("Data session ended — please rejoin.")
-	end)
-
-	if player.Parent == Players then
-		profiles[player] = profile
-		print(
-			string.format(
-				"[GRIDIRON] %s loaded — pingCount = %d",
-				player.Name,
-				profile.Data.pingCount
-			)
-		)
-	else
-		profile:EndSession()
-	end
+local function teamSummary(team: any)
+	return {
+		id = team.id,
+		city = team.city,
+		name = team.name,
+		abbr = team.abbr,
+		primary = team.primary,
+		secondary = team.secondary,
+	}
 end
 
-for _, player in Players:GetPlayers() do
-	task.spawn(onPlayerAdded, player)
-end
-Players.PlayerAdded:Connect(onPlayerAdded)
-
-Players.PlayerRemoving:Connect(function(player)
-	local profile = profiles[player]
-	if profile then
-		profile:EndSession()
+local function isValidTeam(teamId: string): boolean
+	for _, t in Teams do
+		if t.id == teamId then
+			return true
+		end
 	end
-end)
+	return false
+end
 
-Remotes.Ping.OnServerEvent:Connect(function(player)
-	local profile = profiles[player]
+-- The state blob the client renders for the team-overview screen.
+local function buildState(franchise: any)
+	local teams = {}
+	for _, t in Teams do
+		table.insert(teams, teamSummary(t))
+	end
+	return {
+		ok = true,
+		hasFranchise = true,
+		teamId = franchise.teamId,
+		team = franchise.league[franchise.teamId], -- full, with roster
+		teams = teams,
+		record = {
+			wins = franchise.wins,
+			losses = franchise.losses,
+			gamesPlayed = franchise.gamesPlayed,
+		},
+	}
+end
+
+Remotes.NewFranchise.OnServerInvoke = function(player: Player, teamId: any)
+	if type(teamId) ~= "string" or not isValidTeam(teamId) then
+		return { ok = false, error = "invalid team" }
+	end
+	local profile = SaveService.get(player)
 	if not profile then
-		return
+		return { ok = false, error = "no profile" }
 	end
-	profile.Data.pingCount += 1
-	print(
-		string.format("[GRIDIRON] Ping from %s — total %d", player.Name, profile.Data.pingCount)
-	)
-end)
+
+	local seed = player.UserId * 131 + os.time() % 100003
+	profile.Data.franchise = {
+		teamId = teamId,
+		seed = seed,
+		league = Generator.buildLeague(Teams, seed),
+		gamesPlayed = 0,
+		wins = 0,
+		losses = 0,
+	}
+	print(string.format("[GRIDIRON] %s started a franchise with %s.", player.Name, teamId))
+	return buildState(profile.Data.franchise)
+end
+
+Remotes.SimGame.OnServerInvoke = function(player: Player)
+	local profile = SaveService.get(player)
+	if not profile or not profile.Data.franchise then
+		return { ok = false, error = "no franchise" }
+	end
+	local f = profile.Data.franchise
+
+	-- Rotate through the league for opponents (Slice 2 will replace this with a schedule).
+	local opponents = {}
+	for _, t in Teams do
+		if t.id ~= f.teamId then
+			table.insert(opponents, t.id)
+		end
+	end
+	table.sort(opponents)
+	local oppId = opponents[(f.gamesPlayed % #opponents) + 1]
+
+	local home = f.league[f.teamId]
+	local away = f.league[oppId]
+	local gameSeed = f.seed + (f.gamesPlayed + 1) * 7919
+	local result = Engine.simulate(home, away, gameSeed)
+
+	f.gamesPlayed += 1
+	if result.winnerId == f.teamId then
+		f.wins += 1
+	else
+		f.losses += 1
+	end
+
+	return {
+		ok = true,
+		result = result,
+		homeName = home.name,
+		awayName = away.name,
+		record = { wins = f.wins, losses = f.losses, gamesPlayed = f.gamesPlayed },
+	}
+end
+
+Remotes.GetState.OnServerInvoke = function(player: Player)
+	local profile = SaveService.get(player)
+	if not profile then
+		return { ok = false, error = "no profile" }
+	end
+	local f = profile.Data.franchise
+	if not f then
+		return { ok = true, hasFranchise = false }
+	end
+	return buildState(f)
+end
 
 print("[GRIDIRON] Server up.")
