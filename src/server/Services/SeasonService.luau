@@ -16,6 +16,7 @@ local DraftClass = require(script.Parent.Parent.League.DraftClass)
 local Draft = require(script.Parent.Parent.League.Draft)
 local OffseasonController = require(script.Parent.Parent.League.OffseasonController)
 local CareerController = require(script.Parent.Parent.League.CareerController)
+local News = require(script.Parent.Parent.League.News)
 
 local SeasonService = {}
 
@@ -152,15 +153,35 @@ function SeasonService:Start()
 			return { ok = false, error = "not an available job" }
 		end
 
+		local report = f.pendingCareer.report
+		local oldTeamName = f.league[f.teamId].name
+
 		-- Wrap up the finished season (credits/history for the team you just coached),
 		-- age the whole league, run the draft, and build next season.
 		local summary = OffseasonController.run(f, OFFSEASON_DEPS, f.seed)
+
+		-- Generate news headlines from what just happened (kept newest-first, capped).
+		f.news = f.news or {}
+		local fresh = News.fromOffseason(summary, report, oldTeamName)
+		for i = #fresh, 1, -1 do
+			table.insert(f.news, 1, fresh[i])
+		end
+		while #f.news > 40 do
+			table.remove(f.news)
+		end
 
 		local switched = teamId ~= f.teamId
 		if switched then
 			f.teamId = teamId
 			f.coach.teamsCoached = f.coach.teamsCoached or {}
 			table.insert(f.coach.teamsCoached, teamId)
+			table.insert(f.news, 1, {
+				kind = "career",
+				text = string.format(
+					"✍️ Signed on as the new head coach of the %s!",
+					f.league[teamId].name
+				),
+			})
 		end
 		f.pendingCareer = false
 

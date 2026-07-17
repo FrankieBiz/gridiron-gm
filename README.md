@@ -1,7 +1,28 @@
 # GRIDIRON GM
 
-A football front-office simulation for Roblox. Code-first: built in Cursor, synced into
-Studio with Rojo, versioned in Git. See `The Franchise Playbook` for the full roadmap.
+A football front-office **dynasty simulation** for Roblox — Retro Bowl's loop with real
+depth. You manage a franchise (no on-field play); the computer simulates games and you
+build a dynasty over many seasons. Code-first: synced into Studio with Rojo, versioned in Git.
+
+## The game loop
+- **Sim your season** week by week → climb the standings → make the top-4 playoffs → win the title.
+- **Offseason**: players age, develop toward their potential, and retire; you draft rookies
+  (with fog-of-war scouting — true ratings are hidden) and earn coaching credits.
+- **Team HQ**: spend credits to upgrade Training / Rehab / Stadium (real sim effects).
+- **Coaching career**: owner expectations by team prestige; hit them or the seat gets hot
+  and you're fired. Build reputation to unlock job offers and climb from a weak team to a
+  blue-blood. Career record, titles, and a franchise Hall of Fame persist across seasons.
+- **News feed**: headlines that name your players — retirements, breakout rookies, titles.
+
+Tabs: **Season** (next game + news) · **Roster** · **League** (standings) · **HQ**
+(facilities) · **Career** (reputation/job security) · **History** (banners + season log).
+
+## Verify game logic headlessly (no Studio needed)
+```sh
+lune run tests/dynasty.luau   # plays 3 seasons: aging, draft, credits, career grades
+lune run tests/season.luau    # plays one full season to a champion
+lune run tests/sim.luau       # 2000-game realism + determinism check
+```
 
 ## Toolchain (managed by Rokit)
 

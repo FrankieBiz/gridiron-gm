@@ -58,6 +58,8 @@ local function buildState(f: any)
 		prestige = prestige,
 		expectedWins = CareerController.expectedWins(prestige),
 		pendingCareer = f.pendingCareer or false,
+		news = f.news or {},
+		history = (f.history and f.history.seasons) or {},
 		season = {
 			year = f.season.year,
 			week = f.season.week,

@@ -14,7 +14,17 @@ type Props = {
 	season: { year: number, week: number, phase: string, totalWeeks: number },
 	standings: { any },
 	schedule: any,
+	news: { any }?,
 	onSim: () -> (),
+}
+
+local NEWS_COLOR = {
+	title = Color3.fromRGB(233, 182, 62),
+	career = Color3.fromRGB(232, 92, 34),
+	draft = Color3.fromRGB(74, 168, 120),
+	retire = Color3.fromRGB(150, 172, 162),
+	credits = Color3.fromRGB(233, 182, 62),
+	league = Color3.fromRGB(150, 172, 162),
 }
 
 local function lookup(teams: { any }): { [string]: any }
@@ -60,51 +70,57 @@ local function Dashboard(props: Props)
 		buttonText = "▶  START NEXT SEASON"
 	end
 
-	-- Standings rows.
+	-- News feed rows (auto-sized wrapped text cards).
+	local news = props.news or {}
 	local rows: { [string]: any } = {
 		layout = e(
 			"UIListLayout",
-			{ Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }
+			{ Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }
 		),
 	}
-	for i, row in props.standings do
-		local t = byId[row.teamId]
-		local mine = row.teamId == props.teamId
-		rows["s_" .. row.teamId] = e("Frame", {
-			BackgroundColor3 = if mine then Theme.field2 else Theme.field3,
-			Size = UDim2.new(1, 0, 0, 30),
+	if #news == 0 then
+		rows.empty = e("TextLabel", {
+			Text = "Sim your season — headlines will appear here.",
+			Font = Theme.font.body,
+			TextColor3 = Theme.chalkSoft,
+			TextSize = 14,
+			BackgroundTransparency = 1,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Size = UDim2.new(1, 0, 0, 24),
+			LayoutOrder = 1,
+		})
+	end
+	for i, item in news do
+		rows["n_" .. i] = e("Frame", {
+			BackgroundColor3 = Theme.field2,
+			Size = UDim2.fromScale(1, 0),
+			AutomaticSize = Enum.AutomaticSize.Y,
 			LayoutOrder = i,
 			BorderSizePixel = 0,
 		}, {
-			corner = e("UICorner", { CornerRadius = UDim.new(0, 6) }),
-			rank = e("TextLabel", {
-				Text = tostring(i),
-				Font = Enum.Font.GothamBold,
-				TextScaled = true,
-				TextColor3 = Theme.chalkSoft,
-				BackgroundTransparency = 1,
-				Position = UDim2.fromOffset(8, 6),
-				Size = UDim2.fromOffset(22, 18),
+			corner = e("UICorner", { CornerRadius = UDim.new(0, 8) }),
+			stripe = e("Frame", {
+				BackgroundColor3 = NEWS_COLOR[item.kind] or Theme.chalkSoft,
+				Size = UDim2.new(0, 4, 1, 0),
+				BorderSizePixel = 0,
 			}),
-			name = e("TextLabel", {
-				Text = t and (t.abbr .. "  " .. t.name) or row.teamId,
-				Font = if mine then Enum.Font.GothamBlack else Enum.Font.Gotham,
-				TextScaled = true,
-				TextColor3 = if mine then Theme.flag else Theme.chalk,
+			pad = e("UIPadding", {
+				PaddingLeft = UDim.new(0, 14),
+				PaddingRight = UDim.new(0, 12),
+				PaddingTop = UDim.new(0, 8),
+				PaddingBottom = UDim.new(0, 8),
+			}),
+			text = e("TextLabel", {
+				Text = item.text,
+				Font = Theme.font.medium,
+				TextColor3 = Theme.chalk,
+				TextSize = 14,
+				TextWrapped = true,
 				BackgroundTransparency = 1,
 				TextXAlignment = Enum.TextXAlignment.Left,
-				Position = UDim2.fromOffset(36, 6),
-				Size = UDim2.new(1, -140, 0, 18),
-			}),
-			rec = e("TextLabel", {
-				Text = string.format("%d-%d  (%+d)", row.w, row.l, row.diff),
-				Font = Enum.Font.GothamMedium,
-				TextScaled = true,
-				TextColor3 = Theme.chalkSoft,
-				BackgroundTransparency = 1,
-				TextXAlignment = Enum.TextXAlignment.Right,
-				Position = UDim2.new(1, -108, 0, 6),
-				Size = UDim2.fromOffset(100, 18),
+				TextYAlignment = Enum.TextYAlignment.Top,
+				Size = UDim2.fromScale(1, 0),
+				AutomaticSize = Enum.AutomaticSize.Y,
 			}),
 		})
 	end
@@ -162,16 +178,16 @@ local function Dashboard(props: Props)
 				}),
 			}),
 		}),
-		standingsTitle = e("TextLabel", {
-			Text = "LEAGUE STANDINGS",
-			Font = Enum.Font.GothamBold,
+		newsTitle = e("TextLabel", {
+			Text = "📰 LATEST NEWS",
+			Font = Theme.font.bold,
 			TextScaled = true,
 			TextColor3 = Theme.chalkSoft,
 			BackgroundTransparency = 1,
 			TextXAlignment = Enum.TextXAlignment.Left,
 			Position = UDim2.fromOffset(14, 156),
 			Size = UDim2.fromOffset(220, 16),
-		}),
+		}, { max = e("UITextSizeConstraint", { MaxTextSize = 14 }) }),
 		list = e("ScrollingFrame", {
 			Size = UDim2.new(1, -24, 1, -186),
 			Position = UDim2.fromOffset(12, 178),

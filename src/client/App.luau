@@ -21,6 +21,7 @@ local Offseason = require(script.Parent.screens.Offseason)
 local Facilities = require(script.Parent.screens.Facilities)
 local CareerDecision = require(script.Parent.screens.CareerDecision)
 local CareerProfile = require(script.Parent.screens.CareerProfile)
+local History = require(script.Parent.screens.History)
 
 local e = React.createElement
 
@@ -42,6 +43,8 @@ local function fetchAll(): any?
 		prestige = st.prestige or 3,
 		expectedWins = st.expectedWins or 8,
 		pendingCareer = st.pendingCareer or false,
+		news = st.news or {},
+		history = st.history or {},
 		standings = (se and se.ok and se.standings) or {},
 		schedule = (se and se.ok and se.schedule) or {},
 	}
@@ -195,6 +198,7 @@ local function App()
 				season = data.season,
 				standings = data.standings,
 				schedule = data.schedule,
+				news = data.news,
 				onSim = simWeek,
 			})
 		elseif tab == "Roster" then
@@ -210,13 +214,19 @@ local function App()
 				credits = data.credits,
 				onUpgrade = upgradeFacility,
 			})
-		else
+		elseif tab == "Career" then
 			content = e(CareerProfile, {
 				coach = data.coach,
 				team = data.team,
 				prestige = data.prestige,
 				expectedWins = data.expectedWins,
 				record = data.record,
+			})
+		else
+			content = e(History, {
+				history = data.history,
+				teams = data.teams,
+				coach = data.coach,
 			})
 		end
 
