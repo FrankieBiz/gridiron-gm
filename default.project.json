@@ -1,0 +1,30 @@
+{
+  "name": "gridiron-gm",
+  "tree": {
+    "$className": "DataModel",
+
+    "ReplicatedStorage": {
+      "Shared": { "$path": "src/shared" }
+    },
+
+    "ServerScriptService": {
+      "Server": { "$path": "src/server" }
+    },
+
+    "ServerStorage": {
+      "ProfileStore": { "$path": "vendor/ProfileStore.luau" }
+    },
+
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "Client": { "$path": "src/client" }
+      }
+    },
+
+    "Workspace": {
+      "$properties": {
+        "FilteringEnabled": true
+      }
+    }
+  }
+}

@@ -1,0 +1,4 @@
+std = "roblox"
+
+# If Selene complains it can't find the roblox std, generate it once:
+#   selene generate-roblox-std
