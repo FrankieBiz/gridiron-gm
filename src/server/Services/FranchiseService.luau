@@ -60,6 +60,8 @@ local function buildState(f: any)
 		pendingCareer = f.pendingCareer or false,
 		news = f.news or {},
 		history = (f.history and f.history.seasons) or {},
+		achievements = f.achievements or {},
+		dynastyScore = f.dynastyScore or 0,
 		season = {
 			year = f.season.year,
 			week = f.season.week,

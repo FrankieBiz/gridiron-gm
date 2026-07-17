@@ -13,6 +13,9 @@ local DraftClass = require("../src/server/League/DraftClass")
 local Draft = require("../src/server/League/Draft")
 local OffseasonController = require("../src/server/League/OffseasonController")
 local CareerController = require("../src/server/League/CareerController")
+local Awards = require("../src/server/League/Awards")
+local Stats = require("../src/server/League/Stats")
+local Achievements = require("../src/server/League/Achievements")
 
 local league = Generator.buildLeague(Teams, 2026)
 local teamIds = {}
@@ -109,7 +112,42 @@ for s = 1, 3 do
 		)
 	)
 
+	local awards = Awards.compute(league, ranked, f.seed + f.season.year * 17, Stats)
+	local mvp = awards.majors[1]
+	print(
+		string.format(
+			"  Awards: MVP %s %s (%s) — %s · %d All-League",
+			mvp.position,
+			mvp.name,
+			mvp.teamName,
+			mvp.stat,
+			#awards.allLeague
+		)
+	)
+
 	local summary = OffseasonController.run(f, deps, f.seed)
+
+	f.achievements = f.achievements or {}
+	local seasons = f.history.seasons
+	local ach = Achievements.check(f.achievements, {
+		coach = coach,
+		history = seasons,
+		lastSeason = seasons[#seasons],
+		madePlayoffs = rank <= 4,
+		prestige = league[myId].prestige or 3,
+	})
+	if #ach.newlyUnlocked > 0 then
+		local names = {}
+		for _, d in ach.newlyUnlocked do
+			table.insert(names, d.name)
+		end
+		print(
+			"  🏅 Unlocked: "
+				.. table.concat(names, ", ")
+				.. " · dynasty score "
+				.. ach.dynastyScore
+		)
+	end
 	print(
 		string.format(
 			"  Offseason: %d retired, %d rookies drafted, +%d credits (total %d)",
