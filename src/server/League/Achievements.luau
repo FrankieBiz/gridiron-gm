@@ -4,9 +4,17 @@
 
 local Achievements = {}
 
+export type Def = {
+	id: string,
+	name: string,
+	desc: string,
+	points: number,
+	test: (ctx: any) -> boolean,
+}
+
 -- Every achievement: id, name, description, and a predicate over the career context.
 -- ctx = { coach, history (seasons), lastSeason = {wins,losses,champion,wonIt}, prestige }
-local DEFS = {
+local DEFS: { Def } = {
 	{
 		id = "first_win",
 		name = "On the Board",
@@ -22,7 +30,7 @@ local DEFS = {
 		desc = "Make the playoffs",
 		points = 10,
 		test = function(ctx)
-			return ctx.madePlayoffs
+			return ctx.madePlayoffs == true
 		end,
 	},
 	{
@@ -95,7 +103,7 @@ local DEFS = {
 		desc = "Coach 3 different teams",
 		points = 20,
 		test = function(ctx)
-			return ctx.coach.teamsCoached and #ctx.coach.teamsCoached >= 3
+			return ctx.coach.teamsCoached ~= nil and #ctx.coach.teamsCoached >= 3
 		end,
 	},
 	{

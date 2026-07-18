@@ -12,11 +12,13 @@ Players.CharacterAutoLoads = false
 
 local ServiceLoader = require(ReplicatedStorage.Shared.Modules.core.ServiceLoader)
 
+-- Casts: each module defines only the lifecycle methods it needs (Init or Start), and
+-- Luau won't unify a sealed table missing an optional field with the Service shape.
 local loader = ServiceLoader.new()
-loader:add(require(script.Services.SaveService)) -- must init first (others read saves)
-loader:add(require(script.Services.FranchiseService))
-loader:add(require(script.Services.SeasonService))
-loader:add(require(script.Services.DraftService))
+loader:add(require(script.Services.SaveService) :: any) -- must init first (others read saves)
+loader:add(require(script.Services.FranchiseService) :: any)
+loader:add(require(script.Services.SeasonService) :: any)
+loader:add(require(script.Services.DraftService) :: any)
 loader:start()
 
 print("[GRIDIRON] Server up.")

@@ -56,8 +56,13 @@ function SeasonService:Start()
 		end
 
 		local season = f.season
-		local out =
-			SeasonController.advanceWeek(season, makeSimFn(f.league), Standings.compute, f.seed)
+		-- Structural GameResult aliases differ per module; the shapes match at runtime.
+		local out = SeasonController.advanceWeek(
+			season,
+			makeSimFn(f.league) :: any,
+			Standings.compute :: any,
+			f.seed
+		)
 
 		-- Surface the player's own game from this week's slate (fallback to the first game).
 		local mine = out.games[1]

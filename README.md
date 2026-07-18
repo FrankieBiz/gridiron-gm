@@ -34,12 +34,18 @@ rokit install
 
 That installs the versions pinned in `rokit.toml`:
 
-| Tool   | Role                        | Web equivalent      |
-| ------ | --------------------------- | ------------------- |
-| Rojo   | sync `.luau` files → Studio | webpack dev server  |
-| Wally  | package manager             | npm                 |
-| StyLua | formatter                   | prettier            |
-| Selene | linter                      | eslint              |
+| Tool     | Role                          | Web equivalent      |
+| -------- | ----------------------------- | ------------------- |
+| Rojo     | sync `.luau` files → Studio   | webpack dev server  |
+| Wally    | package manager               | npm                 |
+| StyLua   | formatter                     | prettier            |
+| Selene   | linter                        | eslint              |
+| luau-lsp | headless typechecker (`analyze`) | tsc --noEmit     |
+| Lune     | standalone Luau runtime       | node (for tests)    |
+
+`globalTypes.d.luau` (committed) is the Roblox API surface luau-lsp typechecks against;
+refresh it now and then from
+`https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/main/scripts/globalTypes.d.luau`.
 
 Saves use **ProfileStore** (vendored in `/vendor/ProfileStore.luau`).
 
@@ -93,4 +99,14 @@ stylua src tests  # format
 selene src        # lint
 rojo build default.project.json -o build.rbxlx   # validate the whole tree
 rojo sourcemap default.project.json -o sourcemap.json   # refresh LSP types
+luau-lsp analyze --defs=globalTypes.d.luau --sourcemap=sourcemap.json \
+  --base-luaurc=.luaurc --ignore "Packages/**" --ignore "vendor/**" \
+  --no-strict-dm-types src   # typecheck
 ```
+
+## Claude Code layer
+
+`CLAUDE.md` + `knowledge/*.md` carry the project conventions; `.claude/skills/` has the
+workflows (`/roblox-ship` quality gate, `/roblox-system`, `/roblox-screen`,
+`/roblox-remote`, `/roblox-test`, `/roblox-data`); `.claude/agents/roblox-specialist.md`
+is the delegated stack agent.

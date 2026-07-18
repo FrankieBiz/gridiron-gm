@@ -1,133 +1,253 @@
 --!strict
--- Team HQ: spend coaching credits to upgrade facilities. Tangible, visible progression.
+-- Facilities — the HQ tab: gold-stroked credits banner, then three facility cards with
+-- segmented level pips and an UPGRADE verb that beckons when affordable
+-- (spec: ui-v2-ixd §4.7 IXD-31; metadata from Shared.Data.Facilities).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
 local React = require(ReplicatedStorage.Packages.React)
-local Theme = require(script.Parent.Parent.Theme)
-local Button = require(script.Parent.Parent.components.Button)
-local Card = require(script.Parent.Parent.components.Card)
+local Franchise = require(ReplicatedStorage.Shared.Types.Franchise)
 local FacilitiesData = require(ReplicatedStorage.Shared.Data.Facilities)
+local Theme = require(script.Parent.Parent.Theme)
+local motion = require(script.Parent.Parent.motion)
+local Card = require(script.Parent.Parent.components.Card)
+local Button = require(script.Parent.Parent.components.Button)
+local Badge = require(script.Parent.Parent.components.Badge)
+local ProgressBar = require(script.Parent.Parent.components.ProgressBar)
+local AnimatedNumber = require(script.Parent.Parent.components.AnimatedNumber)
 
 local e = React.createElement
 
-type Props = {
-	facilities: { [string]: number },
+export type Props = {
+	facilities: Franchise.FacilityLevels,
 	credits: number,
+	upgrading: string?,
 	onUpgrade: (key: string) -> (),
 }
 
-local function pips(level: number): any
-	local children: { [string]: any } = {
-		layout = e("UIListLayout", {
-			FillDirection = Enum.FillDirection.Horizontal,
-			Padding = UDim.new(0, 4),
-			SortOrder = Enum.SortOrder.LayoutOrder,
-		}),
-	}
-	for i = 1, FacilitiesData.MAX_LEVEL do
-		children["p" .. i] = e("Frame", {
-			BackgroundColor3 = if i <= level then Theme.flag else Theme.line,
-			Size = UDim2.fromScale(1 / FacilitiesData.MAX_LEVEL, 1),
-			LayoutOrder = i,
-			BorderSizePixel = 0,
-		}, { corner = e("UICorner", { CornerRadius = UDim.new(0, 3) }) })
-	end
-	return e("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, -20, 0, 10) }, children)
-end
+local BANNER_H = 48
+local CARD_H = 148
 
 local function Facilities(props: Props)
-	local cards: { [string]: any } = {
-		layout = e(
-			"UIListLayout",
-			{ Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder }
-		),
-		pad = e("UIPadding", {
-			PaddingLeft = UDim.new(0, 12),
-			PaddingRight = UDim.new(0, 12),
-			PaddingTop = UDim.new(0, 12),
-		}),
+	-- Static record → dynamic-key map, so the metadata loop can index by facility key.
+	local levels: { [string]: number } = {
+		training = props.facilities.training,
+		rehab = props.facilities.rehab,
+		stadium = props.facilities.stadium,
 	}
 
-	for i, fac in FacilitiesData.list do
-		local level = props.facilities[fac.key] or 1
+	local stagger = motion.useStagger("hq", {
+		count = #FacilitiesData.list,
+		step = 0.06,
+		span = 0.3,
+		easing = motion.Solver.easeOutBack,
+	})
+
+	local cards: { [string]: any } = {
+		_layout = e("UIListLayout", {
+			Padding = UDim.new(0, Theme.space.md),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+		_pad = e("UIPadding", { PaddingBottom = UDim.new(0, Theme.space.xl) }),
+	}
+
+	for i, f in FacilitiesData.list do
+		local level = levels[f.key] or 1
 		local maxed = level >= FacilitiesData.MAX_LEVEL
 		local cost = FacilitiesData.costForNext(level)
-		local afford = props.credits >= cost
-		local btnText = if maxed then "MAX LEVEL" else string.format("UPGRADE · 🪙 %d", cost)
+		local affordable = not maxed and props.credits >= cost
+		local entrance = stagger.item(i)
 
-		cards["c_" .. fac.key] = e(Card, {
-			size = UDim2.new(1, 0, 0, 148),
-			layoutOrder = i,
-			children = {
-				icon = e("TextLabel", {
-					Text = fac.icon,
-					TextScaled = true,
-					BackgroundTransparency = 1,
-					Position = UDim2.fromOffset(14, 12),
-					Size = UDim2.fromOffset(40, 40),
+		local body: { [string]: any } = {
+			pad = e("UIPadding", {
+				PaddingTop = UDim.new(0, Theme.space.md),
+				PaddingBottom = UDim.new(0, Theme.space.md),
+				PaddingLeft = UDim.new(0, Theme.space.md),
+				PaddingRight = UDim.new(0, Theme.space.md),
+			}),
+			icon = e("TextLabel", {
+				Text = f.icon,
+				Font = Theme.font.body,
+				TextSize = 24,
+				BackgroundTransparency = 1,
+				Size = UDim2.fromOffset(32, 26),
+				TextXAlignment = Enum.TextXAlignment.Left,
+			}),
+			name = e("TextLabel", {
+				Text = string.upper(f.name),
+				Font = Theme.type.h2.font,
+				TextSize = Theme.type.h2.size,
+				TextColor3 = Theme.text.primary,
+				TextTruncate = Enum.TextTruncate.AtEnd,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				BackgroundTransparency = 1,
+				Position = UDim2.fromOffset(40, 2),
+				Size = UDim2.new(1, -140, 0, 22),
+			}),
+			lv = e("Frame", {
+				BackgroundTransparency = 1,
+				AnchorPoint = Vector2.new(1, 0),
+				AutomaticSize = Enum.AutomaticSize.X,
+				Position = UDim2.new(1, 0, 0, 2),
+				Size = UDim2.fromOffset(0, Theme.size.chipH),
+			}, {
+				badge = e(Badge, {
+					text = `LV {level}`,
+					variant = (if maxed then "gold" else "neutral") :: Badge.Variant,
 				}),
-				name = e("TextLabel", {
-					Text = string.upper(fac.name),
-					Font = Theme.font.display,
-					TextScaled = true,
-					TextColor3 = Theme.chalk,
-					BackgroundTransparency = 1,
-					TextXAlignment = Enum.TextXAlignment.Left,
-					Position = UDim2.fromOffset(62, 14),
-					Size = UDim2.new(1, -160, 0, 20),
-				}, { max = e("UITextSizeConstraint", { MaxTextSize = 19 }) }),
-				lvl = e("TextLabel", {
-					Text = "LEVEL " .. level,
-					Font = Theme.font.bold,
-					TextScaled = true,
-					TextColor3 = Theme.flag,
-					BackgroundTransparency = 1,
-					TextXAlignment = Enum.TextXAlignment.Right,
-					Position = UDim2.new(1, -110, 0, 14),
-					Size = UDim2.fromOffset(96, 18),
-				}, { max = e("UITextSizeConstraint", { MaxTextSize = 15 }) }),
-				effect = e("TextLabel", {
-					Text = fac.effect,
-					Font = Theme.font.body,
-					TextScaled = true,
-					TextColor3 = Theme.chalkSoft,
-					BackgroundTransparency = 1,
-					TextXAlignment = Enum.TextXAlignment.Left,
-					Position = UDim2.fromOffset(62, 40),
-					Size = UDim2.new(1, -76, 0, 28),
-				}, { max = e("UITextSizeConstraint", { MaxTextSize = 14 }) }),
-				pips = e("Frame", {
-					BackgroundTransparency = 1,
-					Position = UDim2.fromOffset(14, 78),
-					Size = UDim2.new(1, -28, 0, 10),
-				}, { bar = pips(level) }),
-				upgrade = e("Frame", {
-					BackgroundTransparency = 1,
-					Position = UDim2.fromOffset(14, 98),
-					Size = UDim2.new(1, -28, 0, 38),
-				}, {
-					btn = e(Button, {
-						text = btnText,
-						size = UDim2.fromScale(1, 1),
-						disabled = maxed or not afford,
-						color = if maxed then Theme.field3 else nil,
-						onActivated = function()
-							props.onUpgrade(fac.key)
-						end,
-					}),
+			}),
+			effect = e("TextLabel", {
+				Text = f.effect,
+				Font = Theme.type.caption.font,
+				TextSize = Theme.type.caption.size,
+				TextColor3 = Theme.text.secondary,
+				TextWrapped = true,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextYAlignment = Enum.TextYAlignment.Top,
+				BackgroundTransparency = 1,
+				Position = UDim2.fromOffset(0, 30),
+				Size = UDim2.new(1, 0, 0, 26),
+			}),
+			pips = e("Frame", {
+				BackgroundTransparency = 1,
+				Position = UDim2.fromOffset(0, 62),
+				Size = UDim2.new(1, 0, 0, 10),
+			}, {
+				bar = e(ProgressBar, {
+					value = level,
+					max = FacilitiesData.MAX_LEVEL,
+					segments = FacilitiesData.MAX_LEVEL,
+					height = 10,
 				}),
-			},
+			}),
+		}
+
+		if maxed then
+			body.maxedBadge = e("Frame", {
+				BackgroundTransparency = 1,
+				AnchorPoint = Vector2.new(1, 1),
+				AutomaticSize = Enum.AutomaticSize.X,
+				Position = UDim2.new(1, 0, 1, -8),
+				Size = UDim2.fromOffset(0, Theme.size.chipH),
+			}, {
+				badge = e(Badge, { text = "MAXED OUT", variant = "gold" :: Badge.Variant }),
+			})
+		else
+			body.cost = e("TextLabel", {
+				Text = if affordable
+					then string.format("COST %d 🪙", cost)
+					else string.format("NEED %d MORE", cost - props.credits),
+				Font = Theme.font.mono,
+				TextSize = Theme.type.monoSm.size,
+				TextColor3 = if affordable then Theme.text.secondary else Theme.gold,
+				TextTruncate = Enum.TextTruncate.AtEnd,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				BackgroundTransparency = 1,
+				AnchorPoint = Vector2.new(0, 1),
+				Position = UDim2.new(0, 0, 1, -12),
+				Size = UDim2.new(1, -152, 0, 16),
+			})
+			body.upgrade = e("Frame", {
+				BackgroundTransparency = 1,
+				AnchorPoint = Vector2.new(1, 1),
+				Position = UDim2.new(1, 0, 1, 0),
+				Size = UDim2.fromOffset(140, 40),
+			}, {
+				btn = e(Button, {
+					text = "UPGRADE",
+					onActivated = function()
+						props.onUpgrade(f.key)
+					end,
+					disabled = not affordable,
+					loading = props.upgrading == f.key,
+					pulse = affordable,
+					size = UDim2.fromScale(1, 1),
+				}),
+			})
+		end
+
+		cards["f_" .. f.key] = e("Frame", {
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, 0, 0, CARD_H),
+			LayoutOrder = i,
+		}, {
+			slide = e("Frame", {
+				BackgroundTransparency = 1,
+				Size = UDim2.fromScale(1, 1),
+				Position = entrance:map(function(p: number): UDim2
+					return UDim2.fromOffset(0, math.floor(16 * (1 - p)))
+				end),
+			}, {
+				card = e(Card, {
+					variant = "raised" :: Card.Variant,
+					size = UDim2.fromScale(1, 1),
+					children = body,
+				}),
+			}),
 		})
 	end
 
-	return e("ScrollingFrame", {
-		Size = UDim2.fromScale(1, 1),
+	return e("Frame", {
 		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		ScrollBarThickness = 5,
-		CanvasSize = UDim2.new(0, 0, 0, 0),
-		AutomaticCanvasSize = Enum.AutomaticSize.Y,
-	}, cards)
+		Size = UDim2.fromScale(1, 1),
+	}, {
+		_pad = e("UIPadding", {
+			PaddingLeft = UDim.new(0, Theme.chrome.padX),
+			PaddingRight = UDim.new(0, Theme.chrome.padX),
+			PaddingTop = UDim.new(0, Theme.space.md),
+		}),
+		banner = e("Frame", {
+			BackgroundColor3 = Theme.surface.raised,
+			BorderSizePixel = 0,
+			Size = UDim2.new(1, 0, 0, BANNER_H),
+		}, {
+			corner = e("UICorner", { CornerRadius = UDim.new(0, Theme.radius.md) }),
+			grad = e("UIGradient", { Rotation = 90, Color = Theme.grad.raised }),
+			stroke = e("UIStroke", {
+				Color = Theme.gold,
+				Transparency = 0.45,
+				Thickness = 1,
+				ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+			}),
+			coin = e("TextLabel", {
+				Text = "🪙",
+				Font = Theme.font.body,
+				TextSize = 20,
+				BackgroundTransparency = 1,
+				Position = UDim2.fromOffset(Theme.space.md, 0),
+				Size = UDim2.new(0, 24, 1, 0),
+			}),
+			amount = e(AnimatedNumber, {
+				value = props.credits,
+				textColor3 = Theme.gold,
+				textSize = Theme.type.h1.size,
+				textXAlignment = Enum.TextXAlignment.Left,
+				position = UDim2.fromOffset(Theme.space.md + 30, 0),
+				size = UDim2.new(0, 110, 1, 0),
+			}),
+			caption = e("TextLabel", {
+				Text = "COACHING CREDITS",
+				Font = Theme.type.eyebrow.font,
+				TextSize = Theme.type.eyebrow.size,
+				TextColor3 = Theme.text.tertiary,
+				TextXAlignment = Enum.TextXAlignment.Right,
+				BackgroundTransparency = 1,
+				AnchorPoint = Vector2.new(1, 0),
+				Position = UDim2.new(1, -Theme.space.md, 0, 0),
+				Size = UDim2.new(0, 140, 1, 0),
+			}),
+		}),
+		scroll = e("ScrollingFrame", {
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			Position = UDim2.fromOffset(0, BANNER_H + Theme.space.md),
+			Size = UDim2.new(1, 0, 1, -BANNER_H - Theme.space.md),
+			AutomaticCanvasSize = Enum.AutomaticSize.Y,
+			CanvasSize = UDim2.new(),
+			ScrollBarThickness = 4,
+			ScrollBarImageColor3 = Theme.line,
+		}, cards),
+	})
 end
 
 return Facilities

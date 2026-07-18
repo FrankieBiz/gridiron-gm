@@ -1,188 +1,482 @@
 --!strict
--- The interactive draft board: scout prospects to narrow their fog-of-war range, then
--- draft one when you're on the clock. AI fills the rest.
+-- The war room: fog-of-war prospect board with SCOUT/PICK actions, an ON THE CLOCK
+-- status banner, and the my-picks ticker strip. Terminal state when the draft is done
+-- (spec: IXD-36, master A13). Row tap opens ProspectDetailModal via the overlay.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
 local React = require(ReplicatedStorage.Packages.React)
+local Franchise = require(ReplicatedStorage.Shared.Types.Franchise)
 local Theme = require(script.Parent.Parent.Theme)
+local Sound = require(script.Parent.Parent.Sound)
+local SafeArea = require(script.Parent.Parent.SafeArea)
+local motion = require(script.Parent.Parent.motion)
+local Overlay = require(script.Parent.Parent.overlay.OverlayProvider)
+local Button = require(script.Parent.Parent.components.Button)
+local Badge = require(script.Parent.Parent.components.Badge)
+local EmptyState = require(script.Parent.Parent.components.EmptyState)
+local RangeBar = require(script.Parent.Parent.components.RangeBar)
+local AnimatedNumber = require(script.Parent.Parent.components.AnimatedNumber)
+local ProspectDetailModal = require(script.Parent.Parent.components.ProspectDetailModal)
 
 local e = React.createElement
 
 type Props = {
-	draft: any, -- DraftBoard.view output
+	draft: Franchise.DraftView,
+	teams: { Franchise.TeamSummary },
+	scouting: string?,
+	picking: boolean?,
 	onScout: (prospectId: string) -> (),
 	onPick: (prospectId: string) -> (),
 }
 
-local function DraftRoom(props: Props)
-	local d = props.draft
-	local onClock = d.isMyPick
+local HEADER_H = 96
+local BANNER_H = 32
+local STRIP_H = 36
+local ROW_H = 68
 
-	local rows: { [string]: any } = {
-		layout = e(
-			"UIListLayout",
-			{ Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }
-		),
-	}
-	for i, p in d.prospects do
-		local ovrRange = if p.ovrMin == p.ovrMax
-			then tostring(p.ovrMin)
-			else (p.ovrMin .. "-" .. p.ovrMax)
-		local potRange = if p.potMin == p.potMax
-			then tostring(p.potMin)
-			else (p.potMin .. "-" .. p.potMax)
-		local fog = (p.ovrMax - p.ovrMin) -- wider = less scouted
-		rows["p_" .. p.id] = e("Frame", {
-			BackgroundColor3 = Theme.field2,
-			Size = UDim2.new(1, 0, 0, 58),
-			LayoutOrder = i,
-			BorderSizePixel = 0,
+-- Clears the screen's "modal is open" ref however the modal closes (X, scrim, replace).
+local function ModalLifecycle(props: { onUnmount: () -> (), content: any })
+	local onUnmountRef = React.useRef(props.onUnmount)
+	onUnmountRef.current = props.onUnmount
+	React.useEffect(function()
+		return function()
+			local fn = onUnmountRef.current
+			if fn then
+				fn()
+			end
+		end
+	end, {})
+	return props.content
+end
+
+local function abbrFor(teams: { Franchise.TeamSummary }, teamId: string): string
+	for _, t in teams do
+		if t.id == teamId then
+			return t.abbr
+		end
+	end
+	return "???"
+end
+
+-- ---- one prospect row ----
+
+type RowProps = {
+	prospect: Franchise.ScoutedProspect,
+	index: number,
+	entrance: React.Binding<number>,
+	isMyPick: boolean,
+	picking: boolean,
+	scoutingId: string?,
+	scoutPoints: number,
+	onScout: (id: string) -> (),
+	onPick: (id: string) -> (),
+	onOpen: (prospect: Franchise.ScoutedProspect) -> (),
+}
+
+local function ProspectRow(props: RowProps)
+	local p = props.prospect
+	local entrance = props.entrance
+	local collapsed = (p.ovrMax - p.ovrMin) <= 2
+	local canScout = props.scoutPoints > 0 and not collapsed and props.scoutingId == nil
+	local isScoutingMe = props.scoutingId == p.id
+
+	local actionsW = if props.isMyPick then 160 else 84
+	local flexW = -(60 + actionsW + Theme.space.md)
+
+	local inner: { [string]: any } = {
+		_corner = e("UICorner", { CornerRadius = UDim.new(0, Theme.radius.md) }),
+		_stroke = e("UIStroke", {
+			Color = Theme.strokes.edge.color,
+			Thickness = 1,
+			Transparency = entrance:map(function(v: number): number
+				return motion.Motion.alpha(v, Theme.strokes.edge.transparency)
+			end),
+		}),
+		_pos = e("TextLabel", {
+			Text = p.position,
+			Font = Theme.font.display,
+			TextSize = Theme.type.caption.size,
+			TextColor3 = Theme.flag,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			BackgroundTransparency = 1,
+			Position = UDim2.fromOffset(Theme.space.md, 0),
+			Size = UDim2.new(0, 40, 1, 0),
+		}),
+		_name = e("TextLabel", {
+			Text = p.name,
+			Font = Theme.type.h2.font,
+			TextSize = Theme.type.h2.size,
+			TextColor3 = Theme.text.primary,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			BackgroundTransparency = 1,
+			Position = UDim2.fromOffset(60, 8),
+			Size = UDim2.new(1, flexW, 0, 20),
+		}),
+		_age = e("TextLabel", {
+			Text = string.format("AGE %d", p.age),
+			Font = Theme.type.caption.font,
+			TextSize = Theme.type.caption.size,
+			TextColor3 = Theme.text.secondary,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			BackgroundTransparency = 1,
+			Position = UDim2.fromOffset(60, 28),
+			Size = UDim2.new(0, 64, 0, 14),
+		}),
+		_range = e("TextLabel", {
+			Text = if collapsed
+				then tostring(p.ovrMax)
+				else string.format("%d–%d", p.ovrMin, p.ovrMax),
+			Font = Theme.font.mono,
+			TextSize = Theme.type.monoSm.size,
+			TextColor3 = if collapsed then Theme.ovrColor(p.ovrMax) else Theme.text.secondary,
+			TextXAlignment = Enum.TextXAlignment.Right,
+			BackgroundTransparency = 1,
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.new(1, -actionsW - Theme.space.md, 0, 28),
+			Size = UDim2.fromOffset(64, 14),
+		}),
+		_bar = e("Frame", {
+			BackgroundTransparency = 1,
+			Position = UDim2.fromOffset(60, 48),
+			Size = UDim2.new(1, flexW, 0, Theme.size.barH),
 		}, {
-			corner = e("UICorner", { CornerRadius = UDim.new(0, 8) }),
-			pos = e("TextLabel", {
-				Text = p.position,
-				Font = Theme.font.display,
-				TextScaled = true,
-				TextColor3 = Theme.flag,
-				BackgroundTransparency = 1,
-				TextXAlignment = Enum.TextXAlignment.Left,
-				Position = UDim2.fromOffset(12, 10),
-				Size = UDim2.fromOffset(44, 18),
-			}, { max = e("UITextSizeConstraint", { MaxTextSize = 16 }) }),
-			name = e("TextLabel", {
-				Text = p.name,
-				Font = Theme.font.bold,
-				TextScaled = true,
-				TextColor3 = Theme.chalk,
-				BackgroundTransparency = 1,
-				TextXAlignment = Enum.TextXAlignment.Left,
-				Position = UDim2.fromOffset(60, 9),
-				Size = UDim2.new(1, -260, 0, 18),
-			}, { max = e("UITextSizeConstraint", { MaxTextSize = 15 }) }),
-			ratings = e("TextLabel", {
-				Text = string.format(
-					"OVR %s   ▲%s   %s",
-					ovrRange,
-					potRange,
-					if fog <= 2 then "scouted" else "scouting…"
-				),
-				Font = Theme.font.medium,
-				TextScaled = true,
-				TextColor3 = if fog <= 2 then Theme.gold else Theme.chalkSoft,
-				BackgroundTransparency = 1,
-				TextXAlignment = Enum.TextXAlignment.Left,
-				Position = UDim2.fromOffset(60, 30),
-				Size = UDim2.new(1, -260, 0, 16),
-			}, { max = e("UITextSizeConstraint", { MaxTextSize = 13 }) }),
-			scout = e("TextButton", {
-				Text = "🔍",
-				Font = Theme.font.bold,
-				TextScaled = true,
-				TextColor3 = Theme.chalk,
-				BackgroundColor3 = Theme.field3,
-				Position = UDim2.new(1, -104, 0.5, -18),
-				Size = UDim2.fromOffset(44, 36),
-				BorderSizePixel = 0,
-				AutoButtonColor = d.scoutPoints > 0,
-				[React.Event.Activated] = function()
-					if d.scoutPoints > 0 then
-						props.onScout(p.id)
-					end
+			bar = e(RangeBar, { min = p.ovrMin, max = p.ovrMax }),
+		}),
+		_scout = e("Frame", {
+			BackgroundTransparency = 1,
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(
+				1,
+				if props.isMyPick then -84 - Theme.space.sm * 2 else -Theme.space.sm,
+				0.5,
+				0
+			),
+			Size = UDim2.fromOffset(72, 40),
+			ZIndex = 2,
+		}, {
+			btn = e(Button, {
+				text = "SCOUT",
+				variant = "ghost" :: Button.Variant,
+				onActivated = function()
+					props.onScout(p.id)
 				end,
-			}, {
-				corner = e("UICorner", { CornerRadius = UDim.new(0, 8) }),
-				pad = e(
-					"UIPadding",
-					{ PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 6) }
-				),
+				disabled = not canScout and not isScoutingMe,
+				loading = isScoutingMe,
+				size = UDim2.fromScale(1, 1),
 			}),
-			pick = e("TextButton", {
-				Text = "PICK",
-				Font = Theme.font.display,
-				TextScaled = true,
-				TextColor3 = if onClock then Theme.chalk else Theme.chalkSoft,
-				BackgroundColor3 = if onClock then Theme.flag else Theme.field3,
-				Position = UDim2.new(1, -52, 0.5, -18),
-				Size = UDim2.fromOffset(44, 36),
-				BorderSizePixel = 0,
-				AutoButtonColor = onClock,
-				[React.Event.Activated] = function()
-					if onClock then
-						props.onPick(p.id)
-					end
+		}),
+	}
+	if props.isMyPick then
+		inner._pick = e("Frame", {
+			BackgroundTransparency = 1,
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(1, -Theme.space.sm, 0.5, 0),
+			Size = UDim2.fromOffset(72, 40),
+			ZIndex = 2,
+		}, {
+			btn = e(Button, {
+				text = "PICK",
+				variant = "primary" :: Button.Variant,
+				onActivated = function()
+					props.onPick(p.id)
 				end,
-			}, {
-				corner = e("UICorner", { CornerRadius = UDim.new(0, 8) }),
-				pad = e("UIPadding", {
-					PaddingTop = UDim.new(0, 6),
-					PaddingBottom = UDim.new(0, 6),
-					PaddingLeft = UDim.new(0, 4),
-					PaddingRight = UDim.new(0, 4),
-				}),
+				disabled = props.picking,
+				sfx = "pick",
+				size = UDim2.fromScale(1, 1),
 			}),
 		})
 	end
 
 	return e("Frame", {
-		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = Theme.field,
-		BorderSizePixel = 0,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, ROW_H),
+		LayoutOrder = props.index,
 	}, {
-		grad = e(
-			"UIGradient",
-			{ Rotation = 90, Color = ColorSequence.new(Theme.bgTop, Theme.bgBottom) }
+		inner = e(
+			"TextButton",
+			{
+				Text = "",
+				AutoButtonColor = false,
+				BackgroundColor3 = Theme.surface.base,
+				BorderSizePixel = 0,
+				Size = UDim2.new(1, 0, 1, -6),
+				Position = entrance:map(function(v: number): UDim2
+					return UDim2.fromOffset(
+						math.floor(-motion.Motion.dist.slide * 0.75 * (1 - v)),
+						0
+					)
+				end),
+				BackgroundTransparency = entrance:map(function(v: number): number
+					return motion.Motion.alpha(v)
+				end),
+				[React.Event.Activated] = function()
+					props.onOpen(p)
+				end,
+			} :: { [any]: any },
+			inner
 		),
-		header = e("Frame", {
-			BackgroundColor3 = Theme.field3,
-			Size = UDim2.new(1, 0, 0, 76),
+	})
+end
+
+-- ---- the screen ----
+
+local function DraftRoom(props: Props)
+	local draft = props.draft
+	local insets = SafeArea.useInsets()
+	local overlay = Overlay.useOverlay()
+
+	local openIdRef = React.useRef(nil :: string?)
+
+	-- ON THE CLOCK ambience + broadcast cut-in sound when it flips true.
+	local clockPulse =
+		motion.usePulse({ period = 1.1, enabled = draft.isMyPick and not draft.done })
+	local wasMyPickRef = React.useRef(false)
+	React.useEffect(function()
+		if draft.isMyPick and not wasMyPickRef.current and not draft.done then
+			Sound.play("drumroll", { volume = 0.4 })
+		end
+		wasMyPickRef.current = draft.isMyPick
+	end, { draft.isMyPick } :: { any })
+
+	local stagger = motion.useStagger("board", {
+		count = #draft.prospects,
+		step = 0.04,
+		span = 0.26,
+	})
+
+	-- Open (or refresh) the prospect modal. overlay.open with the same id replaces the
+	-- build in place, so scouting results live-update the open modal.
+	local function openProspect(p: Franchise.ScoutedProspect)
+		openIdRef.current = p.id
+		overlay.open("prospect", function(close: () -> ()): any
+			return e(ModalLifecycle, {
+				onUnmount = function()
+					openIdRef.current = nil
+				end,
+				content = e(ProspectDetailModal, {
+					prospect = p,
+					scoutPoints = draft.scoutPoints,
+					scouting = props.scouting == p.id,
+					isMyPick = draft.isMyPick and not draft.done,
+					onScout = function()
+						props.onScout(p.id)
+					end,
+					onPick = if draft.isMyPick and not draft.done
+						then function()
+							close()
+							props.onPick(p.id)
+						end
+						else nil,
+					onClose = close,
+				}),
+			})
+		end)
+	end
+
+	-- Keep an open modal in sync with fresh draft data; close it if the prospect left
+	-- the board (picked by someone).
+	React.useEffect(function()
+		local id = openIdRef.current
+		if not id then
+			return
+		end
+		for _, p in draft.prospects do
+			if p.id == id then
+				openProspect(p)
+				return
+			end
+		end
+		openIdRef.current = nil
+		overlay.close("prospect")
+	end, { props.draft, props.scouting } :: { any })
+
+	local topY = insets.top
+	local padX = Theme.chrome.padX
+	local hasStrip = #draft.myPicks > 0
+	local listTop = topY
+		+ HEADER_H
+		+ (if hasStrip then STRIP_H + Theme.space.sm else 0)
+		+ Theme.space.sm
+
+	-- ---- header ----
+	local onClockText = if draft.isMyPick
+		then "YOU'RE ON THE CLOCK"
+		else string.format("%s ON THE CLOCK", abbrFor(props.teams, draft.onClock))
+	if draft.done then
+		onClockText = "DRAFT COMPLETE"
+	end
+
+	local header = e("Frame", {
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(padX, topY),
+		Size = UDim2.new(1, -padX * 2, 0, HEADER_H),
+	}, {
+		_kicker = e("TextLabel", {
+			Text = "WAR ROOM",
+			Font = Theme.type.eyebrow.font,
+			TextSize = Theme.type.eyebrow.size,
+			TextColor3 = Theme.text.tertiary,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, -120, 0, 14),
+		}),
+		_title = e("TextLabel", {
+			Text = string.format("PICK %d OF %d", draft.pickNumber, draft.totalPicks),
+			Font = Theme.type.h1.font,
+			TextSize = Theme.type.h1.size,
+			TextColor3 = Theme.text.primary,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			BackgroundTransparency = 1,
+			Position = UDim2.fromOffset(0, 18),
+			Size = UDim2.new(1, -120, 0, 26),
+		}),
+		_scoutChip = e("Frame", {
+			BackgroundColor3 = Theme.gold,
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.fromScale(1, 0),
+			Size = UDim2.fromOffset(96, 28),
 			BorderSizePixel = 0,
 		}, {
-			title = e("TextLabel", {
-				Text = "🎯 THE DRAFT",
-				Font = Theme.font.display,
-				TextScaled = true,
-				TextColor3 = Theme.chalk,
+			corner = e("UICorner", { CornerRadius = UDim.new(1, 0) }),
+			glyph = e("TextLabel", {
+				Text = "🔭",
+				Font = Theme.type.body.font,
+				TextSize = 14,
 				BackgroundTransparency = 1,
-				TextXAlignment = Enum.TextXAlignment.Left,
-				Position = UDim2.fromOffset(16, 12),
-				Size = UDim2.fromScale(0.6, 0.4),
-			}, { max = e("UITextSizeConstraint", { MaxTextSize = 24 }) }),
-			status = e("TextLabel", {
-				Text = if onClock
-					then string.format(
-						"YOU'RE ON THE CLOCK  ·  pick %d of %d",
-						d.pickNumber,
-						d.totalPicks
-					)
-					else string.format("Pick %d of %d", d.pickNumber, d.totalPicks),
-				Font = Theme.font.bold,
-				TextScaled = true,
-				TextColor3 = if onClock then Theme.flag else Theme.chalkSoft,
-				BackgroundTransparency = 1,
-				TextXAlignment = Enum.TextXAlignment.Left,
-				Position = UDim2.fromOffset(16, 46),
-				Size = UDim2.fromScale(0.6, 0.28),
-			}, { max = e("UITextSizeConstraint", { MaxTextSize = 15 }) }),
-			scoutPts = e("TextLabel", {
-				Text = "🔍 " .. d.scoutPoints,
-				Font = Theme.font.display,
-				TextScaled = true,
-				TextColor3 = Theme.gold,
-				BackgroundTransparency = 1,
-				TextXAlignment = Enum.TextXAlignment.Right,
-				Position = UDim2.new(1, -110, 0, 20),
-				Size = UDim2.fromOffset(96, 34),
-			}, { max = e("UITextSizeConstraint", { MaxTextSize = 26 }) }),
+				Position = UDim2.fromOffset(10, 0),
+				Size = UDim2.fromOffset(20, 28),
+			}),
+			num = e(AnimatedNumber, {
+				value = draft.scoutPoints,
+				textColor3 = Theme.text.inverse,
+				textSize = Theme.type.mono.size,
+				size = UDim2.fromOffset(50, 28),
+				position = UDim2.new(1, -60, 0, 0),
+			}),
 		}),
-		list = e("ScrollingFrame", {
-			Size = UDim2.new(1, -24, 1, -92),
-			Position = UDim2.fromOffset(12, 84),
+		_banner = e("Frame", {
+			BackgroundColor3 = if draft.isMyPick and not draft.done
+				then Theme.flag
+				else Theme.surface.base,
+			BorderSizePixel = 0,
+			Position = UDim2.fromOffset(0, HEADER_H - BANNER_H),
+			Size = UDim2.new(1, 0, 0, BANNER_H),
+		}, {
+			corner = e("UICorner", { CornerRadius = UDim.new(0, Theme.radius.sm) }),
+			stroke = e("UIStroke", {
+				Color = if draft.isMyPick and not draft.done
+					then Theme.chalk
+					else Theme.strokes.edge.color,
+				Thickness = if draft.isMyPick and not draft.done then 1.5 else 1,
+				Transparency = if draft.isMyPick and not draft.done
+					then clockPulse:map(function(p: number): number
+						return 0.8 - 0.45 * p
+					end)
+					else Theme.strokes.edge.transparency :: number | React.Binding<number>,
+			}),
+			label = e("TextLabel", {
+				Text = onClockText,
+				Font = Theme.font.display,
+				TextSize = Theme.type.bodyBold.size,
+				TextColor3 = if draft.isMyPick and not draft.done
+					then Theme.chalk
+					else Theme.text.secondary,
+				TextTruncate = Enum.TextTruncate.AtEnd,
+				BackgroundTransparency = 1,
+				Size = UDim2.fromScale(1, 1),
+			}),
+		}),
+	})
+
+	-- ---- my-picks strip ----
+	local strip: any = nil
+	if hasStrip then
+		local chips: { [string]: any } = {
+			_layout = e("UIListLayout", {
+				FillDirection = Enum.FillDirection.Horizontal,
+				VerticalAlignment = Enum.VerticalAlignment.Center,
+				Padding = UDim.new(0, Theme.space.sm),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+			}),
+		}
+		for i, pick in draft.myPicks do
+			chips["mp_" .. pick.round .. "_" .. pick.name] = e(Badge, {
+				text = string.format("R%d · %s %s", pick.round, pick.position, pick.name),
+				variant = "outline" :: Badge.Variant,
+				color = Theme.gold,
+				layoutOrder = i,
+			})
+		end
+		strip = e("ScrollingFrame", {
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
-			ScrollBarThickness = 5,
-			CanvasSize = UDim2.new(0, 0, 0, 0),
+			Position = UDim2.fromOffset(padX, topY + HEADER_H + Theme.space.sm),
+			Size = UDim2.new(1, -padX * 2, 0, STRIP_H),
+			CanvasSize = UDim2.new(),
+			AutomaticCanvasSize = Enum.AutomaticSize.X,
+			ScrollBarThickness = 0,
+			ScrollingDirection = Enum.ScrollingDirection.X,
+		}, chips)
+	end
+
+	-- ---- body: terminal / empty / board ----
+	local body: any
+	if draft.done then
+		body = e(EmptyState, {
+			icon = "🔭",
+			title = "DRAFT COMPLETE",
+			body = "Every pick is in. The league office is finalizing the offseason.",
+		})
+	elseif #draft.prospects == 0 then
+		body = e(EmptyState, {
+			icon = "🔭",
+			title = "THE BOARD IS BARE",
+			body = "Every name is off the board. Turn in your pick.",
+		})
+	else
+		local rows: { [string]: any } = {
+			_layout = e("UIListLayout", {
+				Padding = UDim.new(0, 2),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+			}),
+			_pad = e("UIPadding", { PaddingBottom = UDim.new(0, Theme.space.xl) }),
+		}
+		for i, p in draft.prospects do
+			rows["pr_" .. p.id] = e(ProspectRow, {
+				prospect = p,
+				index = i,
+				entrance = stagger.item(i),
+				isMyPick = draft.isMyPick,
+				picking = props.picking == true,
+				scoutingId = props.scouting,
+				scoutPoints = draft.scoutPoints,
+				onScout = props.onScout,
+				onPick = props.onPick,
+				onOpen = openProspect,
+			})
+		end
+		body = e("ScrollingFrame", {
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			Position = UDim2.fromOffset(padX, listTop),
+			Size = UDim2.new(1, -padX * 2, 1, -(listTop + insets.bottom + Theme.space.sm)),
+			CanvasSize = UDim2.new(),
 			AutomaticCanvasSize = Enum.AutomaticSize.Y,
-		}, rows),
+			ScrollBarThickness = 4,
+			ScrollBarImageColor3 = Theme.line,
+		}, rows)
+	end
+
+	return e("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.fromScale(1, 1),
+	}, {
+		_header = header,
+		_strip = strip,
+		_body = body,
 	})
 end
 
