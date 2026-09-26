@@ -98,11 +98,13 @@ function ErrorBoundary:render()
 		})
 	end
 
-	-- Generation key forces a clean remount after recovery.
+	-- Pass children through directly (props.children is already a keyed element table);
+	-- the `key` on this wrapper forces a clean remount when generation changes on recovery.
 	return e("Frame", {
+		key = tostring(state.generation),
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
-	}, { [tostring(state.generation)] = (self.props :: Props).children })
+	}, (self.props :: Props).children)
 end
 
 return ErrorBoundary
